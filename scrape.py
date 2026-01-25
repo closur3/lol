@@ -7,7 +7,7 @@ from pathlib import Path
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup",
-        "title": "2026 LCK Cup,
+        "title": "2026 LCK Cup",
         "url": "https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/",
     },
     {
