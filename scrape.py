@@ -16,31 +16,32 @@ TOURNAMENTS = [
         "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/",
     },
 ]
-# =========================================================
+# ==========================================================
 
-OUTPUT_DIR = Path("tournaments")
-README_FILE = Path("README.md")
-INDEX_FILE = Path("index.html")
+INDEX_HTML = Path("index.html")
 
 
-def scrape_tournament(title: str, url: str, output_md: Path):
-    resp = requests.get(url, timeout=15)
+def scrape_tournament(t):
+    resp = requests.get(t["url"], timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
     stats = defaultdict(lambda: {
-        "bo3_total": 0,
         "bo3_full": 0,
-        "bo5_total": 0,
+        "bo3_total": 0,
         "bo5_full": 0,
-        "current_win": 0,
-        "current_lose": 0,
+        "bo5_total": 0,
+        "series_win": 0,
+        "series_total": 0,
+        "game_win": 0,
+        "game_total": 0,
+        "win": 0,
+        "lose": 0,
         "streak_done": False,
     })
 
     rows = soup.select("table tr")
 
-    # gol.gg：从新到旧
     for row in rows:
         tds = row.find_all("td")
         if len(tds) < 5:
@@ -59,144 +60,113 @@ def scrape_tournament(title: str, url: str, output_md: Path):
             continue
 
         winner, loser = (team1, team2) if s1 > s2 else (team2, team1)
-        max_score = max(s1, s2)
-        min_score = min(s1, s2)
+        max_s, min_s = max(s1, s2), min(s1, s2)
 
-        # ===== BO3 / BO5 =====
-        if max_score == 2:
-            for t in (team1, team2):
-                stats[t]["bo3_total"] += 1
-            if min_score == 1:
-                for t in (team1, team2):
-                    stats[t]["bo3_full"] += 1
+        # ===== BO3 / BO5 打满 =====
+        if max_s == 2:
+            for tname in (team1, team2):
+                stats[tname]["bo3_total"] += 1
+            if min_s == 1:
+                for tname in (team1, team2):
+                    stats[tname]["bo3_full"] += 1
 
-        elif max_score == 3:
-            for t in (team1, team2):
-                stats[t]["bo5_total"] += 1
-            if min_score == 2:
-                for t in (team1, team2):
-                    stats[t]["bo5_full"] += 1
+        elif max_s == 3:
+            for tname in (team1, team2):
+                stats[tname]["bo5_total"] += 1
+            if min_s == 2:
+                for tname in (team1, team2):
+                    stats[tname]["bo5_full"] += 1
 
-        # ===== 当前连胜 / 连败 =====
+        # ===== 大场胜率 =====
+        stats[winner]["series_win"] += 1
+        stats[winner]["series_total"] += 1
+        stats[loser]["series_total"] += 1
+
+        # ===== 小场胜率 =====
+        stats[team1]["game_win"] += s1
+        stats[team1]["game_total"] += s1 + s2
+        stats[team2]["game_win"] += s2
+        stats[team2]["game_total"] += s1 + s2
+
+        # ===== 当前 streak =====
         if not stats[winner]["streak_done"]:
-            if stats[winner]["current_lose"] > 0:
+            if stats[winner]["lose"] > 0:
                 stats[winner]["streak_done"] = True
             else:
-                stats[winner]["current_win"] += 1
+                stats[winner]["win"] += 1
 
         if not stats[loser]["streak_done"]:
-            if stats[loser]["current_win"] > 0:
+            if stats[loser]["win"] > 0:
                 stats[loser]["streak_done"] = True
             else:
-                stats[loser]["current_lose"] += 1
+                stats[loser]["lose"] += 1
 
-    # ===== 输出 Markdown =====
-    lines = [
-        f"# {title}",
-        "",
-        "| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Streak |",
-        "|------|-----|----------|-----|----------|--------|",
-    ]
+    result = []
+    for team, s in stats.items():
+        result.append({
+            "team": team,
+            "bo3_rate": s["bo3_full"] / s["bo3_total"] if s["bo3_total"] else None,
+            "bo5_rate": s["bo5_full"] / s["bo5_total"] if s["bo5_total"] else None,
+            "series_rate": s["series_win"] / s["series_total"] if s["series_total"] else None,
+            "game_rate": s["game_win"] / s["game_total"] if s["game_total"] else None,
+            "streak": s["win"] if s["win"] > 0 else -s["lose"] if s["lose"] > 0 else 0,
+        })
 
-    for team, s in sorted(stats.items()):
-        bo3_rate = f"{s['bo3_full']/s['bo3_total']:.2%}" if s["bo3_total"] else "-"
-        bo5_rate = f"{s['bo5_full']/s['bo5_total']:.2%}" if s["bo5_total"] else "-"
-        streak = f"{s['current_win']}W" if s["current_win"] > 0 else (
-            f"{s['current_lose']}L" if s["current_lose"] > 0 else "-"
-        )
-
-        lines.append(
-            f"| {team} | "
-            f"{s['bo3_full']}/{s['bo3_total']} | {bo3_rate} | "
-            f"{s['bo5_full']}/{s['bo5_total']} | {bo5_rate} | "
-            f"{streak} |"
-        )
-
-    output_md.write_text("\n".join(lines), encoding="utf-8")
-    return stats
+    return {"title": t["title"], "data": result}
 
 
-def build_readme():
-    README_FILE.write_text(
-        "# Tournament Stats\n\n"
-        "➡️ View sortable tables on **GitHub Pages**:\n\n"
-        "- `index.html`\n",
-        encoding="utf-8",
-    )
+def build_index(all_data):
+    html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>League Tournament Stats</title>
+<style>
+body{font-family:system-ui;padding:20px}
+table{border-collapse:collapse;margin-bottom:40px}
+th,td{border:1px solid #ccc;padding:6px 10px;text-align:center}
+th{cursor:pointer;background:#f5f5f5}
+</style>
+<script>
+function sortTable(t,c,a=true){
+const b=t.tBodies[0],r=[...b.rows];
+r.sort((x,y)=>(parseFloat(x.cells[c].dataset.v||0)-parseFloat(y.cells[c].dataset.v||0))*(a?1:-1));
+r.forEach(e=>b.appendChild(e));
+}
+</script>
+</head><body>
+<h1>Tournament Summary</h1>
+"""
 
+    for block in all_data:
+        html += f"<h2>{block['title']}</h2><table><thead><tr>"
+        html += "<th>Team</th>"
+        html += "<th onclick=\"sortTable(this.closest('table'),1,true)\">BO3 Rate</th>"
+        html += "<th onclick=\"sortTable(this.closest('table'),2,true)\">BO5 Rate</th>"
+        html += "<th onclick=\"sortTable(this.closest('table'),3,false)\">Series WR</th>"
+        html += "<th onclick=\"sortTable(this.closest('table'),4,false)\">Game WR</th>"
+        html += "<th onclick=\"sortTable(this.closest('table'),5,false)\">Streak</th>"
+        html += "</tr></thead><tbody>"
 
-def build_index_html(all_stats):
-    html = [
-        "<!DOCTYPE html>",
-        "<html><head><meta charset='utf-8'>",
-        "<title>Tournament Stats</title>",
-        "<style>",
-        "body{font-family:system-ui;margin:40px}",
-        "table{border-collapse:collapse;width:100%;margin-bottom:40px}",
-        "th,td{border:1px solid #ccc;padding:6px;text-align:center}",
-        "th{cursor:pointer;background:#f5f5f5}",
-        "</style>",
-        "<script>",
-        "function sortTable(t,c,n){",
-        "const b=t.tBodies[0];",
-        "const r=[...b.rows];",
-        "const a=t.dataset.c==c&&t.dataset.d=='a'?false:true;",
-        "r.sort((x,y)=>{",
-        "let A=x.cells[c].innerText.replace('%','');",
-        "let B=y.cells[c].innerText.replace('%','');",
-        "return n?(a?A-B:B-A):(a?A.localeCompare(B):B.localeCompare(A));",
-        "});",
-        "r.forEach(tr=>b.appendChild(tr));",
-        "t.dataset.c=c;t.dataset.d=a?'a':'d';}",
-        "</script>",
-        "</head><body>",
-        "<h1>Tournament Summary</h1>",
-        "<p>Click table headers to sort</p>",
-    ]
+        for r in block["data"]:
+            html += f"""
+<tr>
+<td>{r["team"]}</td>
+<td data-v="{r["bo3_rate"] or -1}">{f'{r["bo3_rate"]:.1%}' if r["bo3_rate"] is not None else '-'}</td>
+<td data-v="{r["bo5_rate"] or -1}">{f'{r["bo5_rate"]:.1%}' if r["bo5_rate"] is not None else '-'}</td>
+<td data-v="{r["series_rate"] or -1}">{f'{r["series_rate"]:.1%}' if r["series_rate"] is not None else '-'}</td>
+<td data-v="{r["game_rate"] or -1}">{f'{r["game_rate"]:.1%}' if r["game_rate"] is not None else '-'}</td>
+<td data-v="{r["streak"]}">{r["streak"]:+d}</td>
+</tr>
+"""
+        html += "</tbody></table>"
 
-    for t in TOURNAMENTS:
-        slug = t["slug"]
-        title = t["title"]
-        stats = all_stats.get(slug, {})
-
-        html.append(f"<h2>{title}</h2>")
-        html.append("<table><thead><tr>")
-        headers = ["Team", "BO3", "BO3 Rate", "BO5", "BO5 Rate", "Streak"]
-        for i, h in enumerate(headers):
-            num = "true" if h != "Team" else "false"
-            html.append(f"<th onclick='sortTable(this.closest(\"table\"),{i},{num})'>{h}</th>")
-        html.append("</tr></thead><tbody>")
-
-        for team, s in stats.items():
-            bo3_rate = s["bo3_full"]/s["bo3_total"]*100 if s["bo3_total"] else 0
-            bo5_rate = s["bo5_full"]/s["bo5_total"]*100 if s["bo5_total"] else 0
-            streak = s["current_win"] if s["current_win"] > 0 else -s["current_lose"]
-
-            html.append(
-                f"<tr><td>{team}</td>"
-                f"<td>{s['bo3_full']}/{s['bo3_total']}</td>"
-                f"<td>{bo3_rate:.2f}</td>"
-                f"<td>{s['bo5_full']}/{s['bo5_total']}</td>"
-                f"<td>{bo5_rate:.2f}</td>"
-                f"<td>{streak}</td></tr>"
-            )
-
-        html.append("</tbody></table>")
-
-    html.append("</body></html>")
-    INDEX_FILE.write_text("\n".join(html), encoding="utf-8")
+    html += "<script>document.querySelectorAll('table').forEach(t=>sortTable(t,1,true));</script></body></html>"
+    INDEX_HTML.write_text(html, encoding="utf-8")
 
 
 def main():
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    all_stats = {}
-
-    for t in TOURNAMENTS:
-        md = OUTPUT_DIR / f"{t['slug']}.md"
-        all_stats[t["slug"]] = scrape_tournament(t["title"], t["url"], md)
-
-    build_readme()
-    build_index_html(all_stats)
+    all_data = [scrape_tournament(t) for t in TOURNAMENTS]
+    build_index(all_data)
+    print("Updated index.html")
 
 
 if __name__ == "__main__":
