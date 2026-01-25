@@ -25,6 +25,6 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add tournaments/*.md
+          git add README.md tournaments/*.md
           git commit -m "Update tournament stats" || true
           git push
