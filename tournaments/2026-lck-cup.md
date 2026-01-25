@@ -1,4 +1,4 @@
-# LCK Cup 2026 – BO3 / BO5 打满率
+# 2026 LCK Cup – BO3 / BO5 打满率
 
 | Team | BO3 (Full/Total) | BO3 Full Rate | BO5 (Full/Total) | BO5 Full Rate |
 |------|------------------|---------------|------------------|---------------|
