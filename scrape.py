@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 from pathlib import Path
 
-# ================== 赛事配置（唯一来源） ==================
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup",
@@ -16,7 +15,6 @@ TOURNAMENTS = [
         "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/",
     },
 ]
-# ==========================================================
 
 INDEX_HTML = Path("index.html")
 
@@ -40,9 +38,7 @@ def scrape_tournament(t):
         "streak_done": False,
     })
 
-    rows = soup.select("table tr")
-
-    for row in rows:
+    for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5:
             continue
@@ -62,7 +58,7 @@ def scrape_tournament(t):
         winner, loser = (team1, team2) if s1 > s2 else (team2, team1)
         max_s, min_s = max(s1, s2), min(s1, s2)
 
-        # ===== BO3 / BO5 打满 =====
+        # ---------- BO3 / BO5 ----------
         if max_s == 2:
             for tname in (team1, team2):
                 stats[tname]["bo3_total"] += 1
@@ -77,18 +73,18 @@ def scrape_tournament(t):
                 for tname in (team1, team2):
                     stats[tname]["bo5_full"] += 1
 
-        # ===== 大场胜率 =====
+        # ---------- Series ----------
         stats[winner]["series_win"] += 1
         stats[winner]["series_total"] += 1
         stats[loser]["series_total"] += 1
 
-        # ===== 小场胜率 =====
+        # ---------- Game ----------
         stats[team1]["game_win"] += s1
         stats[team1]["game_total"] += s1 + s2
         stats[team2]["game_win"] += s2
         stats[team2]["game_total"] += s1 + s2
 
-        # ===== 当前 streak =====
+        # ---------- Streak ----------
         if not stats[winner]["streak_done"]:
             if stats[winner]["lose"] > 0:
                 stats[winner]["streak_done"] = True
@@ -101,24 +97,24 @@ def scrape_tournament(t):
             else:
                 stats[loser]["lose"] += 1
 
-    result = []
+    rows = []
     for team, s in stats.items():
-        result.append({
+        rows.append({
             "team": team,
-            "bo3_rate": s["bo3_full"] / s["bo3_total"] if s["bo3_total"] else None,
-            "bo5_rate": s["bo5_full"] / s["bo5_total"] if s["bo5_total"] else None,
-            "series_rate": s["series_win"] / s["series_total"] if s["series_total"] else None,
-            "game_rate": s["game_win"] / s["game_total"] if s["game_total"] else None,
+            "bo3": s,
+            "bo5": s,
+            "series": s,
+            "game": s,
             "streak": s["win"] if s["win"] > 0 else -s["lose"] if s["lose"] > 0 else 0,
         })
 
-    return {"title": t["title"], "data": result}
+    return {"title": t["title"], "rows": rows}
 
 
 def build_index(all_data):
     html = """<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<title>League Tournament Stats</title>
+<title>Tournament Stats</title>
 <style>
 body{font-family:system-ui;padding:20px}
 table{border-collapse:collapse;margin-bottom:40px}
@@ -138,25 +134,38 @@ r.forEach(e=>b.appendChild(e));
 
     for block in all_data:
         html += f"<h2>{block['title']}</h2><table><thead><tr>"
-        html += "<th>Team</th>"
-        html += "<th onclick=\"sortTable(this.closest('table'),1,true)\">BO3 Rate</th>"
-        html += "<th onclick=\"sortTable(this.closest('table'),2,true)\">BO5 Rate</th>"
-        html += "<th onclick=\"sortTable(this.closest('table'),3,false)\">Series WR</th>"
-        html += "<th onclick=\"sortTable(this.closest('table'),4,false)\">Game WR</th>"
-        html += "<th onclick=\"sortTable(this.closest('table'),5,false)\">Streak</th>"
+        headers = [
+            "Team",
+            "BO3 Full",
+            "BO5 Full",
+            "Series WR",
+            "Game WR",
+            "Streak",
+        ]
+        for i, h in enumerate(headers):
+            html += f"<th onclick=\"sortTable(this.closest('table'),{i},true)\">{h}</th>"
         html += "</tr></thead><tbody>"
 
-        for r in block["data"]:
+        for r in block["rows"]:
+            s = r["bo3"]
+            def rate(a, b): return a / b if b else None
+
+            bo3r = rate(s["bo3_full"], s["bo3_total"])
+            bo5r = rate(s["bo5_full"], s["bo5_total"])
+            ser = rate(s["series_win"], s["series_total"])
+            game = rate(s["game_win"], s["game_total"])
+
             html += f"""
 <tr>
 <td>{r["team"]}</td>
-<td data-v="{r["bo3_rate"] or -1}">{f'{r["bo3_rate"]:.1%}' if r["bo3_rate"] is not None else '-'}</td>
-<td data-v="{r["bo5_rate"] or -1}">{f'{r["bo5_rate"]:.1%}' if r["bo5_rate"] is not None else '-'}</td>
-<td data-v="{r["series_rate"] or -1}">{f'{r["series_rate"]:.1%}' if r["series_rate"] is not None else '-'}</td>
-<td data-v="{r["game_rate"] or -1}">{f'{r["game_rate"]:.1%}' if r["game_rate"] is not None else '-'}</td>
+<td data-v="{bo3r or -1}">{s["bo3_full"]}/{s["bo3_total"]} ({bo3r:.1%})</td>
+<td data-v="{bo5r or -1}">{s["bo5_full"]}/{s["bo5_total"]} ({bo5r:.1%})</td>
+<td data-v="{ser or -1}">{s["series_win"]}/{s["series_total"]} ({ser:.1%})</td>
+<td data-v="{game or -1}">{s["game_win"]}/{s["game_total"]} ({game:.1%})</td>
 <td data-v="{r["streak"]}">{r["streak"]:+d}</td>
 </tr>
 """
+
         html += "</tbody></table>"
 
     html += "<script>document.querySelectorAll('table').forEach(t=>sortTable(t,1,true));</script></body></html>"
@@ -164,9 +173,9 @@ r.forEach(e=>b.appendChild(e));
 
 
 def main():
-    all_data = [scrape_tournament(t) for t in TOURNAMENTS]
-    build_index(all_data)
-    print("Updated index.html")
+    data = [scrape_tournament(t) for t in TOURNAMENTS]
+    build_index(data)
+    print("index.html generated")
 
 
 if __name__ == "__main__":
