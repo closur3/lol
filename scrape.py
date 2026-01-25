@@ -96,7 +96,7 @@ def scrape_tournament(title: str, url: str, output_md: Path):
     lines.append(f"# {title}\n")
     lines.append(
         "| Team | BO3 (Full/Total) | BO3 Rate | "
-        "BO5 (Full/Total) | BO5 Rate | Current Streak |"
+        "BO5 (Full/Total) | BO5 Rate | Streak |"
     )
     lines.append(
         "|------|------------------|----------|"
