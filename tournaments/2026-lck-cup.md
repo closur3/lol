@@ -1,6 +1,6 @@
 # 2026 LCK Cup
 
-| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak |
+| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Match | Match WR | Game | Game WR | Streak |
 |------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|
 | Gen.G | 0/4 | 0.0% | 0/0 | - | 4-0 | 100.0% | 8-0 | 100.0% | 4W |
 | Dplus KIA | 1/4 | 25.0% | 0/0 | - | 3-1 | 75.0% | 6-3 | 66.7% | 1L |
