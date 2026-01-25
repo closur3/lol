@@ -33,28 +33,23 @@ def color_streak_wl(streak_type):
     return "#4ade80" if streak_type == "W" else "#f87171"  # 绿色胜利 / 红色失败
 
 def color_by_streak(r):
-    """根据胜率着色 - 使用蓝绿渐变方案"""
+    """根据胜率着色 - 0%绿色到100%红色"""
     if r is None:
         return "#f3f4f6"  # 浅灰色
     
-    # 使用更柔和的颜色渐变：低胜率(橙红) -> 中等(黄色) -> 高胜率(绿色)
-    if r >= 0.7:
-        # 高胜率：深绿到亮绿
-        intensity = (r - 0.7) / 0.3
-        green = int(220 - intensity * 60)
-        return f"rgb(74, {green}, 128)"  # #4ade80 到 #10b981
-    elif r >= 0.4:
-        # 中等胜率：黄色到浅绿
-        intensity = (r - 0.4) / 0.3
-        red = int(251 - intensity * 177)
-        green = int(191 + intensity * 30)
-        return f"rgb({red}, {green}, 36)"  # #fbbf24 到 #84cc33
+    # 0%绿色 -> 50%黄色 -> 100%红色
+    if r <= 0.5:
+        # 0%-50%: 绿色到黄色
+        intensity = r / 0.5
+        red = int(34 + intensity * 216)
+        green = int(197 - intensity * 7)
+        return f"rgb({red}, {green}, 94)"  # 绿色到黄色
     else:
-        # 低胜率：红色到橙色
-        intensity = r / 0.4
-        red = int(239)
-        green = int(68 + intensity * 123)
-        return f"rgb({red}, {green}, 68)"  # #ef4444 到 #fb923c
+        # 50%-100%: 黄色到红色
+        intensity = (r - 0.5) / 0.5
+        red = int(250 - intensity * 30)
+        green = int(204 - intensity * 166)
+        return f"rgb({red}, {green}, 21)"  # 黄色到红色
 
 # ---------- 抓取 ----------
 def scrape_tournament(t):
@@ -204,7 +199,7 @@ table {
 }
 
 th {
-  background: #6366f1;
+  background: #3b82f6;
   color: white;
   padding: 1rem;
   text-align: center;
@@ -215,7 +210,7 @@ th {
 }
 
 th:hover {
-  background: #4f46e5;
+  background: #2563eb;
 }
 
 td {
@@ -277,7 +272,7 @@ function sortTable(n, tableId) {
         table_id = f"table{idx}"
         html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
         html += "<tr>"
-        headers = ["Team","BO3 (Full/Total)","BO3 Rate","BO5 (Full/Total)","BO5 Rate",
+        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
                    "Match","Match WR","Game","Game WR","Streak"]
         for i,h in enumerate(headers):
             html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
