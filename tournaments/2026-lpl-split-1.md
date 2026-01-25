@@ -1,6 +1,6 @@
 # 2026 LPL Split 1
 
-| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Match | Match WR | Game | Game WR | Streak |
+| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak |
 |------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|
 | Ultra Prime | 0/2 | 0.0% | 0/0 | - | 1-1 | 50.0% | 2-2 | 50.0% | 1W |
 | ThunderTalk Gaming | 1/3 | 33.3% | 0/0 | - | 0-3 | 0.0% | 1-6 | 14.3% | 3L |
