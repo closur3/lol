@@ -137,7 +137,7 @@ def build_md_backup(t, stats):
     md_file = OUTPUT_DIR / f"{t['slug']}.md"
     lines = []
     lines.append(f"# {t['title']}\n")
-    lines.append("| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Match | Match WR | Game | Game WR | Streak |")
+    lines.append("| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak |")
     lines.append("|------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|")
 
     for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
@@ -175,24 +175,22 @@ def build_index_html(all_data):
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f8f9fa;
   min-height: 100vh;
   padding: 2rem;
 }
 
 h1 {
-  color: white;
+  color: #1f2937;
   text-align: center;
   margin-bottom: 2rem;
   font-size: 2.5rem;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
 h2 {
-  color: white;
+  color: #374151;
   margin: 2rem 0 1rem 0;
   font-size: 1.8rem;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
 }
 
 table {
@@ -206,18 +204,18 @@ table {
 }
 
 th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #6366f1;
   color: white;
   padding: 1rem;
   text-align: center;
   cursor: pointer;
   font-weight: 600;
-  transition: background 0.3s;
+  transition: background 0.2s;
   user-select: none;
 }
 
 th:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #65408b 100%);
+  background: #4f46e5;
 }
 
 td {
@@ -229,8 +227,7 @@ td {
 }
 
 tr:hover td {
-  background-color: #f9fafb;
-  transform: scale(1.01);
+  background-color: #f3f4f6;
 }
 
 tr:last-child td {
@@ -280,7 +277,7 @@ function sortTable(n, tableId) {
         table_id = f"table{idx}"
         html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
         html += "<tr>"
-        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
+        headers = ["Team","BO3 (Full/Total)","BO3 Rate","BO5 (Full/Total)","BO5 Rate",
                    "Match","Match WR","Game","Game WR","Streak"]
         for i,h in enumerate(headers):
             html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
