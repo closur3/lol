@@ -28,16 +28,16 @@ def rate(n, d):
 def pct(r):
     return f"{r*100:.1f}%" if r is not None else "-"
 
-def color_by_rate(r):
-    if r is None:
-        return "#eeeeee"
-    # 0 -> green, 1 -> red
-    red = int(255 * r)
-    green = int(180 * (1 - r) + 75)  # 绿色基调，避免太刺眼
-    return f"rgb({red},{green},150)"
-
 def color_streak_wl(streak_type):
     return "lightgreen" if streak_type == "W" else "lightcoral"
+
+def color_by_streak(r):
+    if r is None:
+        return "#eee"
+    # r 0-1 →红-绿，轻柔色
+    red = int(255 * r)
+    green = int(180 * (1 - r) + 75)
+    return f"rgb({red},{green},150)"
 
 # ---------- 抓取 ----------
 def scrape_tournament(t):
@@ -185,9 +185,9 @@ th,td{border:1px solid #ccc;padding:6px 10px;text-align:center}
             html += "<tr>"
             html += f"<td>{team}</td>"
             html += f"<td>{s['bo3_full']}/{s['bo3_total']}</td>"
-            html += f"<td style='background:{color_by_rate(bo3_r)}'>{pct(bo3_r)}</td>"
+            html += f"<td style='background:{color_by_streak(bo3_r)}'>{pct(bo3_r)}</td>"
             html += f"<td>{s['bo5_full']}/{s['bo5_total']}</td>"
-            html += f"<td style='background:{color_by_rate(bo5_r)}'>{pct(bo5_r)}</td>"
+            html += f"<td style='background:{color_by_streak(bo5_r)}'>{pct(bo5_r)}</td>"
             html += f"<td>{s['match_win']}-{s['match_total']-s['match_win']}</td>"
             html += f"<td>{pct(match_wr)}</td>"
             html += f"<td>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
