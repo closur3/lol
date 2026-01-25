@@ -34,7 +34,6 @@ def color_streak_wl(streak_type):
 def color_by_streak(r):
     if r is None:
         return "#eee"
-    # r 0-1 →红-绿，轻柔色
     red = int(255 * r)
     green = int(180 * (1 - r) + 75)
     return f"rgb({red},{green},150)"
@@ -154,18 +153,44 @@ def build_index_html(all_data):
 <title>LOL Tournament Stats</title>
 <style>
 table{border-collapse:collapse}
-th,td{border:1px solid #ccc;padding:6px 10px;text-align:center}
-</style></head><body>
+th,td{border:1px solid #ccc;padding:6px 10px;text-align:center;cursor:pointer;}
+</style>
+<script>
+function sortTable(n, tableId) {
+  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+  table = document.getElementById(tableId);
+  switching = true;
+  dir = "asc";
+  while (switching) {
+    switching = false;
+    rows = table.rows;
+    for (i = 1; i < rows.length - 1; i++) {
+      shouldSwitch = false;
+      x = rows[i].getElementsByTagName("TD")[n].innerText;
+      y = rows[i + 1].getElementsByTagName("TD")[n].innerText;
+      x = x.replace('%',''); y = y.replace('%','');
+      if (!isNaN(x) && !isNaN(y)) {x=parseFloat(x); y=parseFloat(y);}
+      if (dir == "asc") {if (x > y) {shouldSwitch=true; break;}} 
+      else {if (x < y) {shouldSwitch=true; break;}}
+    }
+    if (shouldSwitch) {rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount++;}
+    else {if (switchcount == 0 && dir=="asc") {dir="desc"; switching=true;}}
+  }
+}
+</script>
+</head><body>
 <h1>LOL Tournament Stats</h1>
 """
-    for t in TOURNAMENTS:
+    for idx, t in enumerate(TOURNAMENTS):
         stats = all_data[t["slug"]]
-        html += f"<h2>{t['title']}</h2><table>"
-        html += "<tr><th>Team</th><th>BO3 (Full/Total)</th><th>BO3 Rate</th>"
-        html += "<th>BO5 (Full/Total)</th><th>BO5 Rate</th>"
-        html += "<th>Match</th><th>Match WR</th>"
-        html += "<th>Game</th><th>Game WR</th>"
-        html += "<th>Streak</th></tr>"
+        table_id = f"table{idx}"
+        html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
+        html += "<tr>"
+        headers = ["Team","BO3 (Full/Total)","BO3 Rate","BO5 (Full/Total)","BO5 Rate",
+                   "Match","Match WR","Game","Game WR","Streak"]
+        for i,h in enumerate(headers):
+            html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
+        html += "</tr>"
 
         for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
             bo3_r = rate(s["bo3_full"], s["bo3_total"])
