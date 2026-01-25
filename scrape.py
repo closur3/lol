@@ -29,14 +29,32 @@ def pct(r):
     return f"{r*100:.1f}%" if r is not None else "-"
 
 def color_streak_wl(streak_type):
-    return "lightgreen" if streak_type == "W" else "lightcoral"
+    """连胜/连败颜色 - 使用现代渐变色"""
+    return "#4ade80" if streak_type == "W" else "#f87171"  # 绿色胜利 / 红色失败
 
 def color_by_streak(r):
+    """根据胜率着色 - 使用蓝绿渐变方案"""
     if r is None:
-        return "#eee"
-    red = int(255 * r)
-    green = int(180 * (1 - r) + 75)
-    return f"rgb({red},{green},150)"
+        return "#f3f4f6"  # 浅灰色
+    
+    # 使用更柔和的颜色渐变：低胜率(橙红) -> 中等(黄色) -> 高胜率(绿色)
+    if r >= 0.7:
+        # 高胜率：深绿到亮绿
+        intensity = (r - 0.7) / 0.3
+        green = int(220 - intensity * 60)
+        return f"rgb(74, {green}, 128)"  # #4ade80 到 #10b981
+    elif r >= 0.4:
+        # 中等胜率：黄色到浅绿
+        intensity = (r - 0.4) / 0.3
+        red = int(251 - intensity * 177)
+        green = int(191 + intensity * 30)
+        return f"rgb({red}, {green}, 36)"  # #fbbf24 到 #84cc33
+    else:
+        # 低胜率：红色到橙色
+        intensity = r / 0.4
+        red = int(239)
+        green = int(68 + intensity * 123)
+        return f"rgb({red}, {green}, 68)"  # #ef4444 到 #fb923c
 
 # ---------- 抓取 ----------
 def scrape_tournament(t):
@@ -119,7 +137,7 @@ def build_md_backup(t, stats):
     md_file = OUTPUT_DIR / f"{t['slug']}.md"
     lines = []
     lines.append(f"# {t['title']}\n")
-    lines.append("| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak |")
+    lines.append("| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Match | Match WR | Game | Game WR | Streak |")
     lines.append("|------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|")
 
     for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
@@ -129,13 +147,10 @@ def build_md_backup(t, stats):
         game_wr = rate(s["game_win"], s["game_total"])
 
         streak = "-"
-        streak_color = "#eee"
         if s["streak_w"] > 0:
             streak = f"{s['streak_w']}W"
-            streak_color = color_streak_wl("W")
         elif s["streak_l"] > 0:
             streak = f"{s['streak_l']}L"
-            streak_color = color_streak_wl("L")
 
         lines.append(
             f"| {team} | "
@@ -152,8 +167,86 @@ def build_index_html(all_data):
     html = """<html><head><meta charset="utf-8">
 <title>LOL Tournament Stats</title>
 <style>
-table{border-collapse:collapse}
-th,td{border:1px solid #ccc;padding:6px 10px;text-align:center;cursor:pointer;}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+h1 {
+  color: white;
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 2.5rem;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+h2 {
+  color: white;
+  margin: 2rem 0 1rem 0;
+  font-size: 1.8rem;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  margin-bottom: 2rem;
+}
+
+th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s;
+  user-select: none;
+}
+
+th:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #65408b 100%);
+}
+
+td {
+  padding: 0.8rem 1rem;
+  text-align: center;
+  border-bottom: 1px solid #e5e7eb;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+tr:hover td {
+  background-color: #f9fafb;
+  transform: scale(1.01);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+td:first-child {
+  font-weight: 700;
+  color: #1f2937;
+  text-align: left;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
 </style>
 <script>
 function sortTable(n, tableId) {
@@ -179,14 +272,15 @@ function sortTable(n, tableId) {
 }
 </script>
 </head><body>
-<h1>LOL Tournament Stats</h1>
+<div class="container">
+<h1>🏆 LOL Tournament Stats</h1>
 """
     for idx, t in enumerate(TOURNAMENTS):
         stats = all_data[t["slug"]]
         table_id = f"table{idx}"
         html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
         html += "<tr>"
-        headers = ["Team","BO3 (Full/Total)","BO3 Rate","BO5 (Full/Total)","BO5 Rate",
+        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
                    "Match","Match WR","Game","Game WR","Streak"]
         for i,h in enumerate(headers):
             html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
@@ -199,7 +293,7 @@ function sortTable(n, tableId) {
             game_wr = rate(s["game_win"], s["game_total"])
 
             streak = "-"
-            streak_color = "#eee"
+            streak_color = "#f3f4f6"
             if s["streak_w"] > 0:
                 streak = f"{s['streak_w']}W"
                 streak_color = color_streak_wl("W")
@@ -210,17 +304,17 @@ function sortTable(n, tableId) {
             html += "<tr>"
             html += f"<td>{team}</td>"
             html += f"<td>{s['bo3_full']}/{s['bo3_total']}</td>"
-            html += f"<td style='background:{color_by_streak(bo3_r)}'>{pct(bo3_r)}</td>"
+            html += f"<td style='background:{color_by_streak(bo3_r)};color:white;font-weight:600'>{pct(bo3_r)}</td>"
             html += f"<td>{s['bo5_full']}/{s['bo5_total']}</td>"
-            html += f"<td style='background:{color_by_streak(bo5_r)}'>{pct(bo5_r)}</td>"
+            html += f"<td style='background:{color_by_streak(bo5_r)};color:white;font-weight:600'>{pct(bo5_r)}</td>"
             html += f"<td>{s['match_win']}-{s['match_total']-s['match_win']}</td>"
             html += f"<td>{pct(match_wr)}</td>"
             html += f"<td>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
             html += f"<td>{pct(game_wr)}</td>"
-            html += f"<td style='background:{streak_color}'>{streak}</td>"
+            html += f"<td style='background:{streak_color};color:white;font-weight:700;font-size:1.1em'>{streak}</td>"
             html += "</tr>"
         html += "</table>"
-    html += "</body></html>"
+    html += "</div></body></html>"
     INDEX_FILE.write_text(html, encoding="utf-8")
 
 def main():
