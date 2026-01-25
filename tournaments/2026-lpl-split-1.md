@@ -1,7 +1,7 @@
 # 2026 LPL Split 1
 
-| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Streak |
-|------|------------------|----------|------------------|----------|----------------|
+| Team | BO3 | BO3 Rate | BO5 | BO5 Rate | Streak |
+|------|-----|----------|-----|----------|--------|
 | Anyone s Legend | 3/5 | 60.00% | 0/0 | - | 2W |
 | Bilibili Gaming | 2/5 | 40.00% | 0/0 | - | 1L |
 | EDward Gaming | 2/4 | 50.00% | 0/0 | - | 2W |
