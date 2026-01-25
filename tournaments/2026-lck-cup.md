@@ -1,7 +1,7 @@
-# 2026 LCK Cup – BO3 / BO5 & Current Streak
+# 2026 LCK Cup
 
-| Team | BO3 (Full/Total) | BO3 Full Rate | BO5 (Full/Total) | BO5 Full Rate | Current Streak |
-|------|------------------|---------------|------------------|---------------|----------------|
+| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Current Streak |
+|------|------------------|----------|------------------|----------|----------------|
 | BNK FearX | 2/4 | 50.00% | 0/0 | - | 2L |
 | DN SOOPers | 3/4 | 75.00% | 0/0 | - | 1L |
 | DRX | 3/4 | 75.00% | 0/0 | - | 1W |
