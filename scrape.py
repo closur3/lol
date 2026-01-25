@@ -19,7 +19,6 @@ TOURNAMENTS = [
 # ==========================================================
 
 OUTPUT_DIR = Path("tournaments")
-README_FILE = Path("README.md")
 INDEX_FILE = Path("index.html")
 
 
@@ -33,12 +32,14 @@ def pct(r):
 
 
 def color_by_rate(r):
+    """胜率颜色：绿色=高，红色=低，更柔和"""
     if r is None:
         return "#eeeeee"
-    # 0 -> green, 1 -> red
-    red = int(255 * r)
-    green = int(255 * (1 - r))
-    return f"rgb({red},{green},200)"
+    r = max(0, min(1, r))
+    red = int(200 * (1 - r) + 55)
+    green = int(200 * r + 55)
+    blue = 180
+    return f"rgb({red},{green},{blue})"
 
 
 # ---------- 抓取 ----------
@@ -75,6 +76,21 @@ def scrape_tournament(t):
 
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
 
+        # series
+        max_s, min_s = max(s1, s2), min(s1, s2)
+        if max_s == 2:
+            for t_ in (t1, t2):
+                stats[t_]["bo3_total"] += 1
+            if min_s == 1:
+                for t_ in (t1, t2):
+                    stats[t_]["bo3_full"] += 1
+        elif max_s == 3:
+            for t_ in (t1, t2):
+                stats[t_]["bo5_total"] += 1
+            if min_s == 2:
+                for t_ in (t1, t2):
+                    stats[t_]["bo5_full"] += 1
+
         # match
         for t_ in (t1, t2):
             stats[t_]["match_total"] += 1
@@ -86,29 +102,12 @@ def scrape_tournament(t):
         stats[t2]["game_win"] += s2
         stats[t2]["game_total"] += s1 + s2
 
-        max_s, min_s = max(s1, s2), min(s1, s2)
-
-        if max_s == 2:
-            for t_ in (t1, t2):
-                stats[t_]["bo3_total"] += 1
-            if min_s == 1:
-                for t_ in (t1, t2):
-                    stats[t_]["bo3_full"] += 1
-
-        if max_s == 3:
-            for t_ in (t1, t2):
-                stats[t_]["bo5_total"] += 1
-            if min_s == 2:
-                for t_ in (t1, t2):
-                    stats[t_]["bo5_full"] += 1
-
-        # streak（只算当前）
+        # streak
         if not stats[winner]["streak_done"]:
             if stats[winner]["streak_l"] > 0:
                 stats[winner]["streak_done"] = True
             else:
                 stats[winner]["streak_w"] += 1
-
         if not stats[loser]["streak_done"]:
             if stats[loser]["streak_w"] > 0:
                 stats[loser]["streak_done"] = True
@@ -132,18 +131,18 @@ th,td{border:1px solid #ccc;padding:6px 10px;text-align:center}
     for t in TOURNAMENTS:
         stats = all_data[t["slug"]]
 
+        # 排序 BO3 rate 升序
         rows = []
         for team, s in stats.items():
             bo3_r = rate(s["bo3_full"], s["bo3_total"])
             rows.append((bo3_r if bo3_r is not None else 2, team, s))
-
-        rows.sort()  # BO3 rate 升序
+        rows.sort()
 
         html += f"<h2>{t['title']}</h2><table>"
         html += (
             "<tr><th>Team</th>"
-            "<th>BO3</th><th>BO3 Rate</th>"
-            "<th>BO5</th><th>BO5 Rate</th>"
+            "<th>BO3 (Full/Total)</th><th>BO3 Rate</th>"
+            "<th>BO5 (Full/Total)</th><th>BO5 Rate</th>"
             "<th>Match WR</th><th>Game WR</th>"
             "<th>Streak</th></tr>"
         )
@@ -156,10 +155,10 @@ th,td{border:1px solid #ccc;padding:6px 10px;text-align:center}
 
             if s["streak_w"] > 0:
                 streak = f"{s['streak_w']}W"
-                streak_color = color_by_rate(1)
+                streak_color = "rgb(144,238,144)"  # 绿色
             elif s["streak_l"] > 0:
                 streak = f"{s['streak_l']}L"
-                streak_color = color_by_rate(0)
+                streak_color = "rgb(255,182,193)"  # 红色
             else:
                 streak = "-"
                 streak_color = "#eee"
@@ -187,7 +186,6 @@ def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     all_data = {}
-
     for t in TOURNAMENTS:
         stats = scrape_tournament(t)
         all_data[t["slug"]] = stats
