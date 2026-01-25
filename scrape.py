@@ -22,7 +22,6 @@ TOURNAMENTS = [
 def scrape_tournament(title: str, url: str, output_md: Path):
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
-
     soup = BeautifulSoup(resp.text, "html.parser")
 
     stats = defaultdict(lambda: {
@@ -31,16 +30,16 @@ def scrape_tournament(title: str, url: str, output_md: Path):
         "bo3_full": 0,
         "bo5_total": 0,
         "bo5_full": 0,
-        # 连胜 / 连败
-        "current_win_streak": 0,
-        "current_lose_streak": 0,
-        "max_win_streak": 0,
-        "max_lose_streak": 0,
+
+        # 当前连胜 / 连败
+        "current_win": 0,
+        "current_lose": 0,
+        "streak_locked": False,  # 一旦断了就不再累计
     })
 
     rows = soup.select("table tr")
 
-    # ⚠️ 默认认为页面是「旧 → 新」
+    # ⚠️ gol.gg 是「新 → 旧」，我们正好要这个顺序
     for row in rows:
         tds = row.find_all("td")
         if len(tds) < 5:
@@ -50,7 +49,7 @@ def scrape_tournament(title: str, url: str, output_md: Path):
         score = tds[2].get_text(strip=True)
         team2 = tds[3].get_text(strip=True)
 
-        # 未完场
+        # 未完赛
         if "-" not in score:
             continue
 
@@ -61,13 +60,11 @@ def scrape_tournament(title: str, url: str, output_md: Path):
 
         # ===== 判断胜负 =====
         if s1 > s2:
-            winner = team1
-            loser = team2
+            winner, loser = team1, team2
         else:
-            winner = team2
-            loser = team1
+            winner, loser = team2, team1
 
-        # ===== BO3 / BO5 统计 =====
+        # ===== BO3 / BO5 =====
         max_score = max(s1, s2)
         min_score = min(s1, s2)
 
@@ -85,46 +82,49 @@ def scrape_tournament(title: str, url: str, output_md: Path):
                 for t in (team1, team2):
                     stats[t]["bo5_full"] += 1
 
-        # ===== 连胜 / 连败统计 =====
+        # ===== 当前连胜 / 连败（只算最近） =====
         # 胜者
-        stats[winner]["current_win_streak"] += 1
-        stats[winner]["current_lose_streak"] = 0
-        stats[winner]["max_win_streak"] = max(
-            stats[winner]["max_win_streak"],
-            stats[winner]["current_win_streak"],
-        )
+        if not stats[winner]["streak_locked"]:
+            if stats[winner]["current_lose"] > 0:
+                stats[winner]["streak_locked"] = True
+            else:
+                stats[winner]["current_win"] += 1
 
         # 败者
-        stats[loser]["current_lose_streak"] += 1
-        stats[loser]["current_win_streak"] = 0
-        stats[loser]["max_lose_streak"] = max(
-            stats[loser]["max_lose_streak"],
-            stats[loser]["current_lose_streak"],
-        )
+        if not stats[loser]["streak_locked"]:
+            if stats[loser]["current_win"] > 0:
+                stats[loser]["streak_locked"] = True
+            else:
+                stats[loser]["current_lose"] += 1
 
     # ===== 输出 Markdown =====
     lines = []
-    lines.append(f"# {title} – BO3 / BO5 & 连胜连败\n")
+    lines.append(f"# {title} – BO3 / BO5 & Current Streak\n")
     lines.append(
         "| Team | BO3 (Full/Total) | BO3 Full Rate | "
-        "BO5 (Full/Total) | BO5 Full Rate | "
-        "Max Win Streak | Max Lose Streak |"
+        "BO5 (Full/Total) | BO5 Full Rate | Current Streak |"
     )
     lines.append(
         "|------|------------------|---------------|"
-        "------------------|---------------|"
-        "----------------|-----------------|"
+        "------------------|---------------|----------------|"
     )
 
     for team, s in sorted(stats.items()):
         bo3_rate = f"{s['bo3_full'] / s['bo3_total']:.2%}" if s["bo3_total"] else "-"
         bo5_rate = f"{s['bo5_full'] / s['bo5_total']:.2%}" if s["bo5_total"] else "-"
 
+        if s["current_win"] > 0:
+            streak = f"{s['current_win']}W"
+        elif s["current_lose"] > 0:
+            streak = f"{s['current_lose']}L"
+        else:
+            streak = "-"
+
         lines.append(
             f"| {team} | "
             f"{s['bo3_full']}/{s['bo3_total']} | {bo3_rate} | "
             f"{s['bo5_full']}/{s['bo5_total']} | {bo5_rate} | "
-            f"{s['max_win_streak']} | {s['max_lose_streak']} |"
+            f"{streak} |"
         )
 
     output_md.write_text("\n".join(lines), encoding="utf-8")
@@ -136,11 +136,7 @@ def main():
 
     for t in TOURNAMENTS:
         output_md = output_dir / f"{t['slug']}.md"
-        scrape_tournament(
-            title=t["title"],
-            url=t["url"],
-            output_md=output_md,
-        )
+        scrape_tournament(t["title"], t["url"], output_md)
         print(f"Updated {output_md}")
 
 
