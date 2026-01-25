@@ -1,6 +1,9 @@
 name: Scrape Tournament Stats
 
 on:
+  push:
+    paths:
+      - 'scrape.py'
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
