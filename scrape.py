@@ -1,4 +1,5 @@
 import requests
+import json
 from bs4 import BeautifulSoup
 from collections import defaultdict
 from pathlib import Path
@@ -10,9 +11,34 @@ TOURNAMENTS = [
     {"slug": "2026-lpl-split-1", "title": "2026 LPL Split 1", "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/"},
 ]
 INDEX_FILE = Path("index.html")
+TEAMS_JSON = Path("teams.json")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 辅助函数 ----------
+# ---------- 队名映射处理器 ----------
+def load_team_map():
+    if TEAMS_JSON.exists():
+        try:
+            return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
+        except Exception as e:
+            print(f"Error loading JSON: {e}")
+    return {}
+
+TEAM_MAP = load_team_map()
+
+def get_short_name(full_name):
+    """
+    队名优化逻辑：
+    1. 优先使用 JSON 映射
+    2. 映射不存在时，自动移除常见后缀
+    """
+    if full_name in TEAM_MAP:
+        return TEAM_MAP[full_name]
+    
+    # 自动清洗逻辑
+    short = full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
+    return short
+
+# ---------- 颜色与辅助逻辑 ----------
 def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
 def color_by_ratio(r, rev=False):
     if r is None: return "#f3f4f6"
@@ -41,7 +67,8 @@ def scrape(t):
     for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
-        t1, sc, t2 = tds[1].text.strip(), tds[2].text.strip(), tds[3].text.strip()
+        t1_full, sc, t2_full = tds[1].text.strip(), tds[2].text.strip(), tds[3].text.strip()
+        t1, t2 = get_short_name(t1_full), get_short_name(t2_full)
         try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
         except: dt = None
         if "-" not in sc: continue
@@ -51,7 +78,8 @@ def scrape(t):
         for t_ in (t1, t2):
             if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
             stats[t_]["m_t"] += 1; stats[t_]["g_t"] += (s1+s2)
-        stats[win]["m_w"] += 1; stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
+        stats[win]["m_w"] += 1; stats[t1]["game_win"] = stats[t1].get("game_win",0)+s1; stats[t2]["game_win"] = stats[t2].get("game_win",0)+s2
+        stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
         mx, mn = max(s1, s2), min(s1, s2)
         if mx == 2:
             for t_ in (t1, t2): stats[t_]["bo3_t"] += 1
@@ -77,50 +105,28 @@ def build(all_data):
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Stats Dashboard</title>
+    <title>LoL Insights</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #1e293b; }}
-        
-        /* 标题样式处理 */
-        .main-header {{ 
-            text-align: center; 
-            padding: 20px 0 30px 0; 
-        }}
+        body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
+        .main-header {{ text-align: center; padding: 25px 0; }}
         .main-header h1 {{ 
-            margin: 0; 
-            font-size: 2.2rem; 
-            font-weight: 800; 
-            letter-spacing: -1px;
-            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            margin: 0; font-size: 2.4rem; font-weight: 800; 
+            background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }}
-        @media (max-width: 600px) {{
-            .main-header h1 {{ font-size: 1.6rem; }}
-        }}
-
-        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
-        .table-title {{ padding: 15px; background: #fff; border-bottom: 1px solid #f1f5f9; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 1.1rem; }}
+        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
+        .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
         .table-title a {{ color: #2563eb; text-decoration: none; }}
-        
-        table {{ width: 100%; min-width: 1050px; border-collapse: collapse; font-size: 13px; }}
-        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }}
-        th:hover {{ background: #f1f5f9; color: #2563eb; }}
-        
+        table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }}
+        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; }}
         td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }}
-        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 700; padding-left: 15px; color: #0f172a; }}
-        th.team-col {{ background: #f8fafc !important; z-index: 11; }}
-        
-        .badge {{ color: white; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
-        .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; padding-top: 20px; border-top: 1px solid #e2e8f0; }}
-        .footer a {{ color: #3b82f6; text-decoration: none; font-weight: 600; }}
+        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; }}
+        .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
+        .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
     </style>
 </head>
 <body>
-    <header class="main-header">
-        <h1>🏆 LoL Tournament Insights</h1>
-    </header>
-
+    <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
     for idx, t in enumerate(TOURNAMENTS):
@@ -129,9 +135,7 @@ def build(all_data):
         dates = [s["ld"] for s in st.values() if s["ld"]]
         html += f"""
         <div class="wrapper">
-            <div class="table-title">
-                <a href="{t['url']}" target="_blank">{t['title']}</a>
-            </div>
+            <div class="table-title"><a href="{t['url']}" target="_blank">{t['title']}</a></div>
             <table id="{tid}">
                 <thead>
                     <tr>
@@ -150,7 +154,6 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        # 初始排序：BO3打满率升序，胜率降序
         sorted_teams = sorted(st.items(), key=lambda x: (rate(x[1]["bo3_f"], x[1]["bo3_t"]) or 999, -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)))
 
         for team, s in sorted_teams:
@@ -174,47 +177,25 @@ def build(all_data):
         html += "</tbody></table></div>"
 
     html += f"""
-    <div class="footer">
-        Generated at {now} | <a href="{GITHUB_REPO}" target="_blank">View on GitHub</a>
-    </div>
+    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
     </div>
     <script>
-        function doSort(colIdx, tableId) {{
-            const table = document.getElementById(tableId);
-            const tbody = table.tBodies[0];
-            const rows = Array.from(tbody.rows);
-            const isAsc = table.getAttribute('data-dir') === 'asc';
-            
-            rows.sort((a, b) => {{
-                let valA = a.cells[colIdx].innerText;
-                let valB = b.cells[colIdx].innerText;
-                
-                // 日期特殊处理 (Last Match 列)
-                if (colIdx === 10) {{
-                    valA = valA === "-" ? 0 : new Date(valA).getTime();
-                    valB = valB === "-" ? 0 : new Date(valB).getTime();
-                }} else {{
-                    valA = parseVal(valA);
-                    valB = parseVal(valB);
-                }}
-                
-                if (valA === valB) return 0;
-                return isAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        function doSort(n, id) {{
+            const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows), isAsc = t.dataset.dir === 'asc';
+            r.sort((a, b) => {{
+                let x = a.cells[n].innerText, y = b.cells[n].innerText;
+                if (n === 10) {{ x = x === "-" ? 0 : new Date(x).getTime(); y = y === "-" ? 0 : new Date(y).getTime(); }}
+                else {{ x = parse(x); y = parse(y); }}
+                return isAsc ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             }});
-            
-            table.setAttribute('data-dir', isAsc ? 'desc' : 'asc');
-            rows.forEach(r => tbody.appendChild(r));
+            t.dataset.dir = isAsc ? 'desc' : 'asc';
+            r.forEach(row => b.appendChild(row));
         }}
-        
-        function parseVal(v) {{
+        function parse(v) {{
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) {{
-                const parts = v.split('/');
-                return parseFloat(parts[0]) / parseFloat(parts[1]) || 0;
-            }}
+            if (v.includes('/')) return v.split('/').reduce((a,b)=>a/b);
             if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
-            const n = parseFloat(v);
-            return isNaN(n) ? v.toLowerCase() : n;
+            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
         }}
     </script>
 </body>
@@ -224,3 +205,4 @@ def build(all_data):
 if __name__ == "__main__":
     data = {t["slug"]: scrape(t) for t in TOURNAMENTS}
     build(data)
+    print("Success: Data loaded with team name mapping!")
