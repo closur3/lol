@@ -2,33 +2,47 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Tournament Stats Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>LoL Tournament Dashboard</title>
     <style>
         :root { --bg: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --primary: #3b82f6; }
-        body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 2rem; line-height: 1.5; }
-        .container { max-width: 1440px; margin: 0 auto; }
-        h1 { text-align: center; font-size: 2.25rem; font-weight: 800; margin-bottom: 2rem; color: #0f172a; }
-        .tournament-section { background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 3rem; overflow: hidden; border: 1px solid var(--border); }
-        .header-bar { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: #fafafa; }
-        .header-bar h2 { margin: 0; font-size: 1.4rem; font-weight: 700; }
-        .header-bar h2 a { color: var(--text-main); text-decoration: none; transition: color 0.2s; }
-        .header-bar h2 a:hover { color: var(--primary); text-decoration: underline; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 1rem; line-height: 1.5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 1.8rem; margin: 1.5rem 0; color: #0f172a; }
         
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th { background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 0.75rem; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; }
-        th:hover { background: #e2e8f0; }
-        td { padding: 0.9rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
-        tr:hover td { background-color: #f8fafc; }
+        /* 移动端滑动核心修复 */
+        .table-wrapper { 
+            width: 100%; 
+            overflow-x: auto; /* 开启横向滚动 */
+            -webkit-overflow-scrolling: touch; /* iOS 丝滑滚动 */
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
         
-        .team-name { text-align: left; font-weight: 800; color: #0f172a; min-width: 140px; }
-        .badge { color: white; font-weight: 800; border-radius: 6px; padding: 4px 10px; font-size: 0.82rem; }
+        .tournament-section { min-width: 100%; }
+        .header-bar { padding: 1.2rem; border-bottom: 1px solid var(--border); sticky: left; }
+        .header-bar h2 { margin: 0; font-size: 1.25rem; }
+        .header-bar a { color: var(--text-main); text-decoration: none; }
+        
+        table { 
+            width: 100%; 
+            min-width: 1000px; /* 关键：强制表格在大屏以下保持宽度，从而触发 wrapper 的滚动 */
+            border-collapse: collapse; 
+            font-size: 0.85rem; 
+        }
+        
+        th { background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; border-bottom: 2px solid var(--border); cursor: pointer; white-space: nowrap; }
+        td { padding: 0.85rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        
+        .team-name { text-align: left; font-weight: 800; position: sticky; left: 0; background: inherit; z-index: 10; border-right: 2px solid var(--border); }
+        .badge { color: white; font-weight: 800; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; }
         .streak-w { background: #10b981; }
         .streak-l { background: #f43f5e; }
         
-        .footer { text-align: center; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; }
+        .footer { text-align: center; margin-top: 3rem; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }
         .footer a { color: var(--primary); text-decoration: none; font-weight: 600; }
-        .footer a:hover { text-decoration: underline; }
     </style>
     <script>
         function sortTable(n, tableId) {
@@ -58,7 +72,7 @@
     <div class="container">
         <h1>🏆 LoL Tournament Stats</h1>
     
-        <div class="tournament-section">
+        <div class="table-wrapper">
             <div class="header-bar">
                 <h2><a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/" target="_blank">2026 LCK Cup</a></h2>
             </div>
@@ -209,7 +223,7 @@
                     <td><span class='badge streak-l'>4L</span></td>
                     <td style="color:hsl(215, 100%, 40%); font-weight:700">2026-01-25</td>
                 </tr></tbody></table></div>
-        <div class="tournament-section">
+        <div class="table-wrapper">
             <div class="header-bar">
                 <h2><a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/" target="_blank">2026 LPL Split 1</a></h2>
             </div>
@@ -413,8 +427,8 @@
                     <td style="color:hsl(215, 60%, 47%); font-weight:700">2026-01-25</td>
                 </tr></tbody></table></div>
         <div class="footer">
-            最后更新: 2026-01-27 23:45:16 CST | 
-            <a href="https://github.com/closur3/lol" target="_blank">GitHub Repository</a>
+            最后更新: 2026-01-27 23:51:06 CST | 
+            <a href="https://github.com/closur3/lol" target="_blank">GitHub Repo</a>
         </div>
     </div>
 </body>
