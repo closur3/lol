@@ -186,6 +186,14 @@ def build_md_backup(t, stats):
     return md_file
 
 def build_index_html(all_data):
+    from datetime import datetime
+    import pytz
+    
+    # 获取CST时间
+    cst = pytz.timezone('Asia/Shanghai')
+    now_cst = datetime.now(cst)
+    last_update = now_cst.strftime("%Y-%m-%d %H:%M:%S CST")
+    
     html = """<html><head><meta charset="utf-8">
 <title>LOL Tournament Stats</title>
 <style>
@@ -277,6 +285,25 @@ td:first-child {
   max-width: 1600px;
   margin: 0 auto;
 }
+
+.footer {
+  text-align: center;
+  margin-top: 3rem;
+  padding: 2rem 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
 </style>
 <script>
 function sortTable(n, tableId) {
@@ -347,6 +374,12 @@ function sortTable(n, tableId) {
             html += f"<td style='color:#6b7280;font-size:0.9em'>{last_match}</td>"
             html += "</tr>"
         html += "</table>"
+    html += f"""
+<div class="footer">
+  Last Update: {last_update} | 
+  <a href="https://github.com/closur3/lol" target="_blank">GitHub Repository</a>
+</div>
+"""
     html += "</div></body></html>"
     INDEX_FILE.write_text(html, encoding="utf-8")
 
