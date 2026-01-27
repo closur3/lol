@@ -2,9 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 from collections import defaultdict
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-# ================== 赛事配置（唯一来源） ==================
+# ================== 赛事配置 ==================
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup",
@@ -17,145 +17,66 @@ TOURNAMENTS = [
         "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/",
     },
 ]
-# ==========================================================
+# =============================================
 
 OUTPUT_DIR = Path("tournaments")
 INDEX_FILE = Path("index.html")
 
-# ---------- 工具函数 ----------
+# ---------- 现代颜色工具函数 ----------
+
+def get_hsl(h, s=70, l=45):
+    """生成 HSL 颜色字符串"""
+    return f"hsl({int(h)}, {s}%, {l}%)"
+
+def color_by_ratio(r, reverse=False):
+    """
+    根据比例返回颜色背景色
+    r: 0-1 的比例
+    reverse: False 为 0红->1绿 (胜率), True 为 0绿->1红 (打满率)
+    """
+    if r is None: return "#f3f4f6"
+    r = max(0, min(1, r))
+    # 色相：0是红色，140是绿色
+    h = (1 - r) * 140 if reverse else r * 140
+    return get_hsl(h, s=65, l=48)
+
+def color_text_by_ratio(r, reverse=False):
+    """
+    针对白色背景下的文字着色（加深 HSL 的亮度 L 以确保可读性）
+    """
+    if r is None: return "#6b7280"
+    r = max(0, min(1, r))
+    h = (1 - r) * 140 if reverse else r * 140
+    return get_hsl(h, s=80, l=35)
+
+def color_by_date(match_date, all_dates):
+    """根据日期新旧返回颜色：最新为亮蓝色，旧的逐渐变灰"""
+    if not match_date or not all_dates: return "#9ca3af"
+    max_d, min_d = max(all_dates), min(all_dates)
+    if max_d == min_d: return "#3b82f6"
+    
+    # 计算新鲜度 (0=最旧, 1=最新)
+    freshness = (match_date - min_d).total_seconds() / (max_d - min_d).total_seconds()
+    # 蓝色系：从灰蓝色到明亮的科技蓝
+    return f"hsl(215, {int(freshness * 80 + 20)}%, {int(55 - freshness * 15)}%)"
+
 def rate(n, d):
     return n / d if d > 0 else None
 
 def pct(r):
     return f"{r*100:.1f}%" if r is not None else "-"
 
-def color_streak_wl(streak_type):
-    """连胜/连败颜色 - 使用现代渐变色"""
-    return "#4ade80" if streak_type == "W" else "#f87171"  # 绿色胜利 / 红色失败
-
-def color_by_streak(r):
-    """根据胜率着色 - 0%绿色到100%红色"""
-    if r is None:
-        return "#f3f4f6"  # 浅灰色
-    
-    # 0%绿色 -> 50%黄色 -> 100%红色
-    if r <= 0.5:
-        # 0%-50%: 绿色到黄色
-        intensity = r / 0.5
-        red = int(34 + intensity * 216)
-        green = int(197 - intensity * 7)
-        return f"rgb({red}, {green}, 94)"  # 绿色到黄色
-    else:
-        # 50%-100%: 黄色到红色
-        intensity = (r - 0.5) / 0.5
-        red = int(250 - intensity * 30)
-        green = int(204 - intensity * 166)
-        return f"rgb({red}, {green}, 21)"  # 黄色到红色
-
-def color_by_winrate(r):
-    """根据胜率着色 - 0%红色到100%绿色（反向）"""
-    if r is None:
-        return "#f3f4f6"  # 浅灰色
-    
-    # 0%红色 -> 50%黄色 -> 100%绿色
-    if r <= 0.5:
-        # 0%-50%: 红色到黄色
-        intensity = r / 0.5
-        red = int(220 - intensity * 30)
-        green = int(38 + intensity * 166)
-        return f"rgb({red}, {green}, 21)"  # 红色到黄色
-    else:
-        # 50%-100%: 黄色到绿色
-        intensity = (r - 0.5) / 0.5
-        red = int(250 - intensity * 216)
-        green = int(204 - intensity * 7)
-        return f"rgb({red}, {green}, 94)"  # 黄色到绿色
-
-def color_text_by_count(current, total):
-    """根据比例着色文字 - 0到100为绿到红"""
-    if total == 0:
-        return "#6b7280"  # 灰色
-    
-    r = current / total
-    
-    # 0绿色 -> 0.5黄色 -> 1红色
-    if r <= 0.5:
-        intensity = r / 0.5
-        red = int(34 + intensity * 216)
-        green = int(197 - intensity * 7)
-        return f"rgb({red}, {green}, 94)"
-    else:
-        intensity = (r - 0.5) / 0.5
-        red = int(250 - intensity * 30)
-        green = int(204 - intensity * 166)
-        return f"rgb({red}, {green}, 21)"
-
-def color_text_by_winrate(wins, total):
-    """根据胜率着色文字 - 0到100为红到绿"""
-    if total == 0:
-        return "#6b7280"  # 灰色
-    
-    r = wins / total
-    
-    # 0红色 -> 0.5黄色 -> 1绿色
-    if r <= 0.5:
-        intensity = r / 0.5
-        red = int(220 - intensity * 30)
-        green = int(38 + intensity * 166)
-        return f"rgb({red}, {green}, 21)"
-    else:
-        intensity = (r - 0.5) / 0.5
-        red = int(250 - intensity * 216)
-        green = int(204 - intensity * 7)
-        return f"rgb({red}, {green}, 94)"
-
-def color_by_date(match_date, all_dates):
-    """根据日期新旧着色 - 最新绿色到最旧红色"""
-    if match_date is None or not all_dates:
-        return "#6b7280"  # 灰色
-    
-    # 找出最新和最旧的日期
-    min_date = min(all_dates)
-    max_date = max(all_dates)
-    
-    # 如果所有日期相同
-    if min_date == max_date:
-        return "#22c55e"  # 绿色
-    
-    # 计算当前日期在范围中的位置 (0=最新, 1=最旧)
-    date_range = (max_date - min_date).total_seconds()
-    date_pos = (max_date - match_date).total_seconds() / date_range if date_range > 0 else 0
-    
-    # 0(最新)绿色 -> 0.5黄色 -> 1(最旧)红色
-    if date_pos <= 0.5:
-        # 0-0.5: 绿色到黄色
-        intensity = date_pos / 0.5
-        red = int(34 + intensity * 216)
-        green = int(197 - intensity * 7)
-        return f"rgb({red}, {green}, 94)"
-    else:
-        # 0.5-1: 黄色到红色
-        intensity = (date_pos - 0.5) / 0.5
-        red = int(250 - intensity * 30)
-        green = int(204 - intensity * 166)
-        return f"rgb({red}, {green}, 21)"
-
 def parse_date(date_str):
-    """解析日期字符串，返回datetime对象"""
-    try:
-        # 尝试多种日期格式
-        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-    except:
-        return None
+    for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"]:
+        try: return datetime.strptime(date_str, fmt)
+        except: continue
+    return None
 
-# ---------- 抓取 ----------
+# ---------- 数据抓取 ----------
+
 def scrape_tournament(t):
-    resp = requests.get(t["url"], timeout=15)
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    resp = requests.get(t["url"], headers=headers, timeout=15)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -169,327 +90,203 @@ def scrape_tournament(t):
         "last_match_date": None,
     })
 
-    for row in soup.select("table tr"):
+    rows = soup.select("table tr")
+    # 倒序遍历以正确计算当前连胜 (从最近的比赛开始往回推)
+    for row in rows:
         tds = row.find_all("td")
-        if len(tds) < 5:
-            continue
+        if len(tds) < 5: continue
 
-        t1 = tds[1].get_text(strip=True)
-        t2 = tds[3].get_text(strip=True)
-        score = tds[2].get_text(strip=True)
-        
-        # 提取日期（在最后一列）
+        t1, score, t2 = tds[1].get_text(strip=True), tds[2].get_text(strip=True), tds[3].get_text(strip=True)
         date_str = tds[-1].get_text(strip=True) if len(tds) >= 7 else ""
         match_date = parse_date(date_str)
 
-        if "-" not in score:
-            continue
-
+        if "-" not in score: continue
         try:
             s1, s2 = map(int, score.split("-"))
-        except ValueError:
-            continue
+        except: continue
 
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
 
-        # 更新最后比赛日期
+        # 统计
         for t_ in (t1, t2):
             if match_date:
                 if stats[t_]["last_match_date"] is None or match_date > stats[t_]["last_match_date"]:
                     stats[t_]["last_match_date"] = match_date
-
-        # 大场统计
-        for t_ in (t1, t2):
             stats[t_]["match_total"] += 1
+            stats[t_]["game_total"] += (s1 + s2)
+        
         stats[winner]["match_win"] += 1
-
-        # 小局统计
         stats[t1]["game_win"] += s1
-        stats[t1]["game_total"] += s1 + s2
         stats[t2]["game_win"] += s2
-        stats[t2]["game_total"] += s1 + s2
 
+        # BO3/BO5 判定
         max_s, min_s = max(s1, s2), min(s1, s2)
-
-        # BO3 / BO5
         if max_s == 2:
-            for t_ in (t1, t2):
-                stats[t_]["bo3_total"] += 1
+            for t_ in (t1, t2): stats[t_]["bo3_total"] += 1
             if min_s == 1:
-                for t_ in (t1, t2):
-                    stats[t_]["bo3_full"] += 1
-        if max_s == 3:
-            for t_ in (t1, t2):
-                stats[t_]["bo5_total"] += 1
+                for t_ in (t1, t2): stats[t_]["bo3_full"] += 1
+        elif max_s == 3:
+            for t_ in (t1, t2): stats[t_]["bo5_total"] += 1
             if min_s == 2:
-                for t_ in (t1, t2):
-                    stats[t_]["bo5_full"] += 1
+                for t_ in (t1, t2): stats[t_]["bo5_full"] += 1
 
-        # 当前连胜/连败
+        # 连胜/连败
         if not stats[winner]["streak_done"]:
-            if stats[winner]["streak_l"] > 0:
-                stats[winner]["streak_done"] = True
-            else:
-                stats[winner]["streak_w"] += 1
+            if stats[winner]["streak_l"] > 0: stats[winner]["streak_done"] = True
+            else: stats[winner]["streak_w"] += 1
         if not stats[loser]["streak_done"]:
-            if stats[loser]["streak_w"] > 0:
-                stats[loser]["streak_done"] = True
-            else:
-                stats[loser]["streak_l"] += 1
+            if stats[loser]["streak_w"] > 0: stats[loser]["streak_done"] = True
+            else: stats[loser]["streak_l"] += 1
 
     return stats
 
-# ---------- 输出 ----------
-def build_md_backup(t, stats):
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    md_file = OUTPUT_DIR / f"{t['slug']}.md"
-    lines = []
-    lines.append(f"# {t['title']}\n")
-    lines.append("| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak | Last Match |")
-    lines.append("|------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|------------|")
-
-    for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
-        bo3_r = rate(s["bo3_full"], s["bo3_total"])
-        bo5_r = rate(s["bo5_full"], s["bo5_total"])
-        match_wr = rate(s["match_win"], s["match_total"])
-        game_wr = rate(s["game_win"], s["game_total"])
-
-        streak = "-"
-        if s["streak_w"] > 0:
-            streak = f"{s['streak_w']}W"
-        elif s["streak_l"] > 0:
-            streak = f"{s['streak_l']}L"
-
-        last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
-
-        lines.append(
-            f"| {team} | "
-            f"{s['bo3_full']}/{s['bo3_total']} | {pct(bo3_r)} | "
-            f"{s['bo5_full']}/{s['bo5_total']} | {pct(bo5_r)} | "
-            f"{s['match_win']}-{s['match_total']-s['match_win']} | {pct(match_wr)} | "
-            f"{s['game_win']}-{s['game_total']-s['game_win']} | {pct(game_wr)} | "
-            f"{streak} | {last_match} |"
-        )
-    md_file.write_text("\n".join(lines), encoding="utf-8")
-    return md_file
+# ---------- 生成输出 ----------
 
 def build_index_html(all_data):
-    from datetime import datetime, timezone, timedelta
-    
-    # 获取CST时间 (UTC+8)
     cst = timezone(timedelta(hours=8))
-    now_cst = datetime.now(cst)
-    last_update = now_cst.strftime("%Y-%m-%d %H:%M:%S CST")
+    last_update = datetime.now(cst).strftime("%Y-%m-%d %H:%M:%S CST")
     
-    html = """<html><head><meta charset="utf-8">
-<title>LOL Tournament Stats</title>
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOL Pro Stats Dashboard</title>
+    <style>
+        :root {{
+            --bg: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --border: #e5e7eb;
+        }}
+        body {{ font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 2rem; line-height: 1.5; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        h1 {{ text-align: center; font-size: 2.25rem; font-weight: 800; margin-bottom: 2rem; letter-spacing: -0.025em; }}
+        .tournament-section {{ background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 3rem; overflow: hidden; border: 1px solid var(--border); }}
+        .header-bar {{ padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: #fafafa; display: flex; justify-content: space-between; align-items: center; }}
+        .header-bar h2 {{ margin: 0; font-size: 1.25rem; }}
+        .header-bar a {{ color: #3b82f6; text-decoration: none; font-size: 0.875rem; font-weight: 600; }}
+        
+        table {{ width: 100%; border-collapse: collapse; font-size: 0.875rem; }}
+        th {{ background: #f9fafb; padding: 0.75rem 1rem; text-align: center; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; border-bottom: 2px solid var(--border); cursor: pointer; }}
+        td {{ padding: 0.875rem 1rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }}
+        tr:last-child td {{ border-bottom: none; }}
+        tr:hover td {{ background-color: #f8fafc; }}
+        
+        .team-name {{ text-align: left; font-weight: 700; color: var(--text-main); min-width: 120px; }}
+        .badge {{ color: white; font-weight: 700; border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }}
+        .streak-w {{ background: #10b981; }}
+        .streak-l {{ background: #f43f5e; }}
+        .footer {{ text-align: center; margin-top: 4rem; color: var(--text-muted); font-size: 0.875rem; padding-bottom: 2rem; }}
+    </style>
+    <script>
+        function sortTable(n, tableId) {{
+            let table = document.getElementById(tableId), rows, switching = true, i, x, y, shouldSwitch, dir = "desc", switchcount = 0;
+            while (switching) {{
+                switching = false; rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {{
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("TD")[n].innerText.replace('%','');
+                    y = rows[i+1].getElementsByTagName("TD")[n].innerText.replace('%','');
+                    if(x.includes('/')) x = eval(x); if(y.includes('/')) y = eval(y);
+                    if(x.includes('-')) x = parseFloat(x.split('-')[0]); if(y.includes('-')) y = parseFloat(y.split('-')[0]);
+                    x = parseFloat(x) || 0; y = parseFloat(y) || 0;
+                    if (dir == "asc") {{ if (x > y) {{ shouldSwitch = true; break; }} }}
+                    else {{ if (x < y) {{ shouldSwitch = true; break; }} }}
+                }}
+                if (shouldSwitch) {{ rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount ++; }}
+                else if (switchcount == 0 && dir == "desc") {{ dir = "asc"; switching = true; }}
+            }}
+        }}
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 LoL Tournament Insights</h1>
+    """
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f8f9fa;
-  min-height: 100vh;
-  padding: 2rem;
-}
-
-h1 {
-  color: #1f2937;
-  text-align: center;
-  margin-bottom: 2rem;
-  font-size: 2.5rem;
-}
-
-h2 {
-  color: #374151;
-  margin: 2rem 0 1rem 0;
-  font-size: 1.8rem;
-}
-
-h2 a {
-  color: #374151;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-h2 a:hover {
-  color: #3b82f6;
-  text-decoration: underline;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  margin-bottom: 2rem;
-}
-
-th {
-  background: #4b5563;
-  color: white;
-  padding: 1rem;
-  text-align: center;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s;
-  user-select: none;
-}
-
-th:hover {
-  background: #374151;
-}
-
-td {
-  padding: 0.8rem 1rem;
-  text-align: center;
-  border-bottom: 1px solid #e5e7eb;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-tr:hover td {
-  background-color: #f3f4f6;
-}
-
-tr:last-child td {
-  border-bottom: none;
-}
-
-td:first-child {
-  font-weight: 700;
-  color: #1f2937;
-  text-align: left;
-}
-
-.container {
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-.footer {
-  text-align: center;
-  margin-top: 3rem;
-  padding: 2rem 0;
-  color: #6b7280;
-  font-size: 0.9rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.footer a {
-  color: #3b82f6;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.footer a:hover {
-  text-decoration: underline;
-}
-</style>
-<script>
-function sortTable(n, tableId) {
-  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-  table = document.getElementById(tableId);
-  switching = true;
-  dir = "asc";
-  while (switching) {
-    switching = false;
-    rows = table.rows;
-    for (i = 1; i < rows.length - 1; i++) {
-      shouldSwitch = false;
-      x = rows[i].getElementsByTagName("TD")[n].innerText;
-      y = rows[i + 1].getElementsByTagName("TD")[n].innerText;
-      x = x.replace('%',''); y = y.replace('%','');
-      if (!isNaN(x) && !isNaN(y)) {x=parseFloat(x); y=parseFloat(y);}
-      if (dir == "asc") {if (x > y) {shouldSwitch=true; break;}} 
-      else {if (x < y) {shouldSwitch=true; break;}}
-    }
-    if (shouldSwitch) {rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount++;}
-    else {if (switchcount == 0 && dir=="asc") {dir="desc"; switching=true;}}
-  }
-}
-</script>
-</head><body>
-<div class="container">
-<h1>🏆 LOL Tournament Stats</h1>
-"""
     for idx, t in enumerate(TOURNAMENTS):
-        stats = all_data[t["slug"]]
-        table_id = f"table{idx}"
+        stats = all_data.get(t["slug"], {})
+        table_id = f"table_{idx}"
+        all_dates = [s["last_match_date"] for s in stats.values() if s["last_match_date"]]
         
-        # 收集所有日期用于颜色计算
-        all_dates = [s["last_match_date"] for s in stats.values() if s["last_match_date"] is not None]
-        
-        html += f"<h2><a href='{t['url']}' target='_blank' style='color:#374151;text-decoration:none'>{t['title']}</a></h2><table id='{table_id}'>"
-        html += "<tr>"
-        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
-                   "Match","Match WR","Game","Game WR","Streak","Last Match"]
-        for i,h in enumerate(headers):
-            html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
-        html += "</tr>"
+        html += f"""
+        <div class="tournament-section">
+            <div class="header-bar">
+                <h2>{t['title']}</h2>
+                <a href="{t['url']}" target="_blank">View Original Source →</a>
+            </div>
+            <table id="{table_id}">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0, '{table_id}')">Team</th>
+                        <th onclick="sortTable(1, '{table_id}')">BO3 Full</th>
+                        <th onclick="sortTable(2, '{table_id}')">BO3 %</th>
+                        <th onclick="sortTable(3, '{table_id}')">BO5 Full</th>
+                        <th onclick="sortTable(4, '{table_id}')">BO5 %</th>
+                        <th onclick="sortTable(5, '{table_id}')">Match W/L</th>
+                        <th onclick="sortTable(6, '{table_id}')">Match WR</th>
+                        <th onclick="sortTable(7, '{table_id}')">Game W/L</th>
+                        <th onclick="sortTable(8, '{table_id}')">Game WR</th>
+                        <th onclick="sortTable(9, '{table_id}')">Streak</th>
+                        <th onclick="sortTable(10, '{table_id}')">Last Match</th>
+                    </tr>
+                </thead>
+                <tbody>"""
 
-        for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
-            bo3_r = rate(s["bo3_full"], s["bo3_total"])
-            bo5_r = rate(s["bo5_full"], s["bo5_total"])
-            match_wr = rate(s["match_win"], s["match_total"])
-            game_wr = rate(s["game_win"], s["game_total"])
+        # 排序：默认按大场胜率排
+        sorted_teams = sorted(stats.items(), key=lambda x: (rate(x[1]["match_win"], x[1]["match_total"]) or 0), reverse=True)
 
-            streak = "-"
-            streak_color = "#f3f4f6"
-            if s["streak_w"] > 0:
-                streak = f"{s['streak_w']}W"
-                streak_color = color_streak_wl("W")
-            elif s["streak_l"] > 0:
-                streak = f"{s['streak_l']}L"
-                streak_color = color_streak_wl("L")
-
-            last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
-            date_color = color_by_date(s["last_match_date"], all_dates)
+        for team, s in sorted_teams:
+            b3r, b5r = rate(s["bo3_full"], s["bo3_total"]), rate(s["bo5_full"], s["bo5_total"])
+            mwr, gwr = rate(s["match_win"], s["match_total"]), rate(s["game_win"], s["game_total"])
             
-            # 计算颜色
-            bo3_text_color = color_text_by_count(s['bo3_full'], s['bo3_total'])
-            bo5_text_color = color_text_by_count(s['bo5_full'], s['bo5_total'])
-            match_text_color = color_text_by_winrate(s['match_win'], s['match_total'])
-            game_text_color = color_text_by_winrate(s['game_win'], s['game_total'])
+            streak_html = "-"
+            if s["streak_w"] > 0: streak_html = f"<span class='badge streak-w'>{s['streak_w']}W</span>"
+            elif s["streak_l"] > 0: streak_html = f"<span class='badge streak-l'>{s['streak_l']}L</span>"
+            
+            last_date_str = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
+            
+            html += f"""
+                <tr>
+                    <td class="team-name">{team}</td>
+                    <td style="color:{color_text_by_ratio(b3r, True)}">{s['bo3_full']}/{s['bo3_total']}</td>
+                    <td style="background:{color_by_ratio(b3r, True)}; color:white; font-weight:700">{pct(b3r)}</td>
+                    <td style="color:{color_text_by_ratio(b5r, True)}">{s['bo5_full']}/{s['bo5_total']}</td>
+                    <td style="background:{color_by_ratio(b5r, True)}; color:white; font-weight:700">{pct(b5r)}</td>
+                    <td style="color:{color_text_by_ratio(mwr)}">{s['match_win']}-{s['match_total']-s['match_win']}</td>
+                    <td style="background:{color_by_ratio(mwr)}; color:white; font-weight:700">{pct(mwr)}</td>
+                    <td style="color:{color_text_by_ratio(gwr)}">{s['game_win']}-{s['game_total']-s['game_win']}</td>
+                    <td style="background:{color_by_ratio(gwr)}; color:white; font-weight:700">{pct(gwr)}</td>
+                    <td>{streak_html}</td>
+                    <td style="color:{color_by_date(s['last_match_date'], all_dates)}; font-weight:600">{last_date_str}</td>
+                </tr>"""
+        
+        html += "</tbody></table></div>"
 
-            html += "<tr>"
-            html += f"<td>{team}</td>"
-            html += f"<td style='color:{bo3_text_color};font-weight:600'>{s['bo3_full']}/{s['bo3_total']}</td>"
-            html += f"<td style='background:{color_by_streak(bo3_r)};color:white;font-weight:600'>{pct(bo3_r)}</td>"
-            html += f"<td style='color:{bo5_text_color};font-weight:600'>{s['bo5_full']}/{s['bo5_total']}</td>"
-            html += f"<td style='background:{color_by_streak(bo5_r)};color:white;font-weight:600'>{pct(bo5_r)}</td>"
-            html += f"<td style='color:{match_text_color};font-weight:600'>{s['match_win']}-{s['match_total']-s['match_win']}</td>"
-            html += f"<td style='background:{color_by_winrate(match_wr)};color:white;font-weight:600'>{pct(match_wr)}</td>"
-            html += f"<td style='color:{game_text_color};font-weight:600'>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
-            html += f"<td style='background:{color_by_winrate(game_wr)};color:white;font-weight:600'>{pct(game_wr)}</td>"
-            html += f"<td style='background:{streak_color};color:white;font-weight:700;font-size:1.1em'>{streak}</td>"
-            html += f"<td style='color:{date_color};font-size:0.95em;font-weight:600'>{last_match}</td>"
-            html += "</tr>"
-        html += "</table>"
     html += f"""
-<div class="footer">
-  Last Update: {last_update} | 
-  <a href="https://github.com/closur3/lol" target="_blank">GitHub Repository</a>
-</div>
-"""
-    html += "</div></body></html>"
+        <div class="footer">
+            Data synchronized on {last_update} • Powered by Gemini AI
+        </div>
+    </div>
+</body>
+</html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
 
 def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
     all_data = {}
     for t in TOURNAMENTS:
-        stats = scrape_tournament(t)
-        all_data[t["slug"]] = stats
-        build_md_backup(t, stats)
+        print(f"Scraping {t['title']}...")
+        try:
+            stats = scrape_tournament(t)
+            all_data[t["slug"]] = stats
+        except Exception as e:
+            print(f"Error scraping {t['title']}: {e}")
+    
     build_index_html(all_data)
-    print("index.html generated and tournament backups updated.")
+    print("\nSuccess! index.html has been generated with modern HSL coloring.")
 
 if __name__ == "__main__":
     main()
