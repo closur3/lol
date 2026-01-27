@@ -52,6 +52,63 @@ def color_by_streak(r):
         green = int(204 - intensity * 166)
         return f"rgb({red}, {green}, 21)"  # 黄色到红色
 
+def color_by_winrate(r):
+    """根据胜率着色 - 0%红色到100%绿色（反向）"""
+    if r is None:
+        return "#f3f4f6"  # 浅灰色
+    
+    # 0%红色 -> 50%黄色 -> 100%绿色
+    if r <= 0.5:
+        # 0%-50%: 红色到黄色
+        intensity = r / 0.5
+        red = int(220 - intensity * 30)
+        green = int(38 + intensity * 166)
+        return f"rgb({red}, {green}, 21)"  # 红色到黄色
+    else:
+        # 50%-100%: 黄色到绿色
+        intensity = (r - 0.5) / 0.5
+        red = int(250 - intensity * 216)
+        green = int(204 - intensity * 7)
+        return f"rgb({red}, {green}, 94)"  # 黄色到绿色
+
+def color_text_by_count(current, total):
+    """根据比例着色文字 - 0到100为绿到红"""
+    if total == 0:
+        return "#6b7280"  # 灰色
+    
+    r = current / total
+    
+    # 0绿色 -> 0.5黄色 -> 1红色
+    if r <= 0.5:
+        intensity = r / 0.5
+        red = int(34 + intensity * 216)
+        green = int(197 - intensity * 7)
+        return f"rgb({red}, {green}, 94)"
+    else:
+        intensity = (r - 0.5) / 0.5
+        red = int(250 - intensity * 30)
+        green = int(204 - intensity * 166)
+        return f"rgb({red}, {green}, 21)"
+
+def color_text_by_winrate(wins, total):
+    """根据胜率着色文字 - 0到100为红到绿"""
+    if total == 0:
+        return "#6b7280"  # 灰色
+    
+    r = wins / total
+    
+    # 0红色 -> 0.5黄色 -> 1绿色
+    if r <= 0.5:
+        intensity = r / 0.5
+        red = int(220 - intensity * 30)
+        green = int(38 + intensity * 166)
+        return f"rgb({red}, {green}, 21)"
+    else:
+        intensity = (r - 0.5) / 0.5
+        red = int(250 - intensity * 216)
+        green = int(204 - intensity * 7)
+        return f"rgb({red}, {green}, 94)"
+
 def color_by_date(match_date, all_dates):
     """根据日期新旧着色 - 最新绿色到最旧红色"""
     if match_date is None or not all_dates:
@@ -275,7 +332,7 @@ table {
 }
 
 th {
-  background: #3b82f6;
+  background: #4b5563;
   color: white;
   padding: 1rem;
   text-align: center;
@@ -286,7 +343,7 @@ th {
 }
 
 th:hover {
-  background: #2563eb;
+  background: #374151;
 }
 
 td {
@@ -394,17 +451,23 @@ function sortTable(n, tableId) {
 
             last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
             date_color = color_by_date(s["last_match_date"], all_dates)
+            
+            # 计算颜色
+            bo3_text_color = color_text_by_count(s['bo3_full'], s['bo3_total'])
+            bo5_text_color = color_text_by_count(s['bo5_full'], s['bo5_total'])
+            match_text_color = color_text_by_winrate(s['match_win'], s['match_total'])
+            game_text_color = color_text_by_winrate(s['game_win'], s['game_total'])
 
             html += "<tr>"
             html += f"<td>{team}</td>"
-            html += f"<td>{s['bo3_full']}/{s['bo3_total']}</td>"
+            html += f"<td style='color:{bo3_text_color};font-weight:600'>{s['bo3_full']}/{s['bo3_total']}</td>"
             html += f"<td style='background:{color_by_streak(bo3_r)};color:white;font-weight:600'>{pct(bo3_r)}</td>"
-            html += f"<td>{s['bo5_full']}/{s['bo5_total']}</td>"
+            html += f"<td style='color:{bo5_text_color};font-weight:600'>{s['bo5_full']}/{s['bo5_total']}</td>"
             html += f"<td style='background:{color_by_streak(bo5_r)};color:white;font-weight:600'>{pct(bo5_r)}</td>"
-            html += f"<td>{s['match_win']}-{s['match_total']-s['match_win']}</td>"
-            html += f"<td>{pct(match_wr)}</td>"
-            html += f"<td>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
-            html += f"<td>{pct(game_wr)}</td>"
+            html += f"<td style='color:{match_text_color};font-weight:600'>{s['match_win']}-{s['match_total']-s['match_win']}</td>"
+            html += f"<td style='background:{color_by_winrate(match_wr)};color:white;font-weight:600'>{pct(match_wr)}</td>"
+            html += f"<td style='color:{game_text_color};font-weight:600'>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
+            html += f"<td style='background:{color_by_winrate(game_wr)};color:white;font-weight:600'>{pct(game_wr)}</td>"
             html += f"<td style='background:{streak_color};color:white;font-weight:700;font-size:1.1em'>{streak}</td>"
             html += f"<td style='color:{date_color};font-size:0.95em;font-weight:600'>{last_match}</td>"
             html += "</tr>"
