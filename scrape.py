@@ -5,17 +5,13 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-# Configuration
-
 TOURNAMENTS = [
-{‘slug’: ‘2026-lck-cup’, ‘title’: ‘2026 LCK Cup’, ‘url’: ‘https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/’},
-{‘slug’: ‘2026-lpl-split-1’, ‘title’: ‘2026 LPL Split 1’, ‘url’: ‘https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/’},
+{“slug”: “2026-lck-cup”, “title”: “2026 LCK Cup”, “url”: “https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/”},
+{“slug”: “2026-lpl-split-1”, “title”: “2026 LPL Split 1”, “url”: “https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/”},
 ]
-INDEX_FILE = Path(‘index.html’)
-TEAMS_JSON = Path(‘teams.json’)
-GITHUB_REPO = ‘https://github.com/closur3/lol’
-
-# Column Index Constants
+INDEX_FILE = Path(“index.html”)
+TEAMS_JSON = Path(“teams.json”)
+GITHUB_REPO = “https://github.com/closur3/lol”
 
 COL_TEAM = 0
 COL_BO3 = 1
@@ -29,12 +25,10 @@ COL_GAME_WR = 8
 COL_STREAK = 9
 COL_LAST_DATE = 10
 
-# Team Name Mapping Handler
-
 def load_team_map():
 if TEAMS_JSON.exists():
 try:
-return json.loads(TEAMS_JSON.read_text(encoding=‘utf-8’))
+return json.loads(TEAMS_JSON.read_text(encoding=“utf-8”))
 except:
 pass
 return {}
@@ -46,53 +40,49 @@ name_upper = full_name.upper()
 for key, short_val in TEAM_MAP.items():
 if key.upper() in name_upper:
 return short_val
-return full_name.replace(‘Esports’, ‘’).replace(‘Gaming’, ‘’).replace(‘Academy’, ‘’).replace(‘Team’, ‘’).strip()
-
-# Helper Functions
+return full_name.replace(“Esports”, “”).replace(“Gaming”, “”).replace(“Academy”, “”).replace(“Team”, “”).strip()
 
 def rate(numerator, denominator):
 return numerator / denominator if denominator > 0 else None
 
 def pct(ratio):
-return f’{ratio*100:.1f}%’ if ratio is not None else ‘-’
+return f”{ratio*100:.1f}%” if ratio is not None else “-”
 
 def get_hsl(hue, saturation=70, lightness=45):
-return f’hsl({int(hue)}, {saturation}%, {lightness}%)’
+return f”hsl({int(hue)}, {saturation}%, {lightness}%)”
 
 def color_by_ratio(ratio, reverse=False):
 if ratio is None:
-return ‘#f1f5f9’
+return “#f1f5f9”
 hue = (1 - max(0, min(1, ratio))) * 140 if reverse else max(0, min(1, ratio)) * 140
 return get_hsl(hue, saturation=65, lightness=48)
 
 def color_by_date(date, all_dates):
 if not date or not all_dates:
-return ‘#9ca3af’
+return “#9ca3af”
 max_date, min_date = max(all_dates), min(all_dates)
 factor = (date - min_date).total_seconds() / (max_date - min_date).total_seconds() if max_date != min_date else 1
-return f’hsl(215, {int(factor * 80 + 20)}%, {int(55 - factor * 15)}%)’
-
-# Scraping Logic
+return f”hsl(215, {int(factor * 80 + 20)}%, {int(55 - factor * 15)}%)”
 
 def scrape(tournament):
 try:
-response = requests.get(tournament[‘url’], headers={‘User-Agent’: ‘Mozilla/5.0’}, timeout=15)
-soup = BeautifulSoup(response.text, ‘html.parser’)
+response = requests.get(tournament[“url”], headers={“User-Agent”: “Mozilla/5.0”}, timeout=15)
+soup = BeautifulSoup(response.text, “html.parser”)
 except:
 return {}
 
 ```
 stats = defaultdict(lambda: {
-    'bo3_full': 0, 'bo3_total': 0, 
-    'bo5_full': 0, 'bo5_total': 0, 
-    'series_wins': 0, 'series_total': 0, 
-    'game_wins': 0, 'game_total': 0, 
-    'streak_wins': 0, 'streak_losses': 0, 
-    'streak_dirty': False, 'last_date': None
+    "bo3_full": 0, "bo3_total": 0, 
+    "bo5_full": 0, "bo5_total": 0, 
+    "series_wins": 0, "series_total": 0, 
+    "game_wins": 0, "game_total": 0, 
+    "streak_wins": 0, "streak_losses": 0, 
+    "streak_dirty": False, "last_date": None
 })
 
-for row in soup.select('table tr'):
-    cells = row.find_all('td')
+for row in soup.select("table tr"):
+    cells = row.find_all("td")
     if len(cells) < 5: 
         continue
     
@@ -101,67 +91,62 @@ for row in soup.select('table tr'):
     score = cells[2].text.strip()
     
     try: 
-        series_date = datetime.strptime(cells[-1].text.strip(), '%Y-%m-%d')
+        series_date = datetime.strptime(cells[-1].text.strip(), "%Y-%m-%d")
     except: 
         series_date = None
         
-    if '-' not in score: 
+    if "-" not in score: 
         continue
     
     try: 
-        score1, score2 = map(int, score.split('-'))
+        score1, score2 = map(int, score.split("-"))
     except: 
         continue
         
     winner, loser = (team1, team2) if score1 > score2 else (team2, team1)
     max_score, min_score = max(score1, score2), min(score1, score2)
     
-    # Update basic statistics
     for team in (team1, team2):
-        if series_date and (not stats[team]['last_date'] or series_date > stats[team]['last_date']): 
-            stats[team]['last_date'] = series_date
-        stats[team]['series_total'] += 1
-        stats[team]['game_total'] += (score1 + score2)
+        if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]): 
+            stats[team]["last_date"] = series_date
+        stats[team]["series_total"] += 1
+        stats[team]["game_total"] += (score1 + score2)
         
-    stats[winner]['series_wins'] += 1
-    stats[team1]['game_wins'] += score1
-    stats[team2]['game_wins'] += score2
+    stats[winner]["series_wins"] += 1
+    stats[team1]["game_wins"] += score1
+    stats[team2]["game_wins"] += score2
     
-    # Determine BO3/BO5
     if max_score == 2:
         for team in (team1, team2): 
-            stats[team]['bo3_total'] += 1
+            stats[team]["bo3_total"] += 1
         if min_score == 1: 
             for team in (team1, team2): 
-                stats[team]['bo3_full'] += 1
+                stats[team]["bo3_full"] += 1
     elif max_score == 3:
         for team in (team1, team2): 
-            stats[team]['bo5_total'] += 1
+            stats[team]["bo5_total"] += 1
         if min_score == 2: 
             for team in (team1, team2): 
-                stats[team]['bo5_full'] += 1
+                stats[team]["bo5_full"] += 1
     
-    # Update win/loss streaks
-    if not stats[winner]['streak_dirty']:
-        if stats[winner]['streak_losses'] > 0: 
-            stats[winner]['streak_dirty'] = True
+    if not stats[winner]["streak_dirty"]:
+        if stats[winner]["streak_losses"] > 0: 
+            stats[winner]["streak_dirty"] = True
         else: 
-            stats[winner]['streak_wins'] += 1
+            stats[winner]["streak_wins"] += 1
             
-    if not stats[loser]['streak_dirty']:
-        if stats[loser]['streak_wins'] > 0: 
-            stats[loser]['streak_dirty'] = True
+    if not stats[loser]["streak_dirty"]:
+        if stats[loser]["streak_wins"] > 0: 
+            stats[loser]["streak_dirty"] = True
         else: 
-            stats[loser]['streak_losses'] += 1
+            stats[loser]["streak_losses"] += 1
             
 return stats
 ```
 
-# HTML Generation
-
 def build(all_data):
-now = datetime.now(timezone(timedelta(hours=8))).strftime(’%Y-%m-%d %H:%M:%S CST’)
-html = f’’’<!DOCTYPE html>
+now = datetime.now(timezone(timedelta(hours=8))).strftime(”%Y-%m-%d %H:%M:%S CST”)
+html = f”””<!DOCTYPE html>
 
 <html>
 <head>
@@ -196,16 +181,16 @@ html = f’’’<!DOCTYPE html>
 </head>
 <body>
     <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
-    <div style="max-width:1400px; margin:0 auto">'''
+    <div style="max-width:1400px; margin:0 auto">"""
 
 ```
 for index, tournament in enumerate(TOURNAMENTS):
-    team_stats = all_data.get(tournament['slug'], {})
-    table_id = f't{index}'
-    dates = [stat['last_date'] for stat in team_stats.values() if stat['last_date']]
-    html += f'''
+    team_stats = all_data.get(tournament["slug"], {})
+    table_id = f"t{index}"
+    dates = [stat["last_date"] for stat in team_stats.values() if stat["last_date"]]
+    html += f"""
     <div class="wrapper">
-        <div class="table-title"><a href="{tournament['url']}" target="_blank">{tournament['title']}</a></div>
+        <div class="table-title"><a href="{tournament["url"]}" target="_blank">{tournament["title"]}</a></div>
         <table id="{table_id}">
             <thead>
                 <tr>
@@ -218,30 +203,30 @@ for index, tournament in enumerate(TOURNAMENTS):
                     <th class="col-last" onclick="doSort({COL_LAST_DATE}, '{table_id}')">Last Date</th>
                 </tr>
             </thead>
-            <tbody>'''
+            <tbody>"""
     
     sorted_teams = sorted(team_stats.items(), key=lambda x: (
-        rate(x[1]['bo3_full'], x[1]['bo3_total']) if rate(x[1]['bo3_full'], x[1]['bo3_total']) is not None else -1.0,
-        -(rate(x[1]['series_wins'], x[1]['series_total']) or 0)
+        rate(x[1]["bo3_full"], x[1]["bo3_total"]) if rate(x[1]["bo3_full"], x[1]["bo3_total"]) is not None else -1.0,
+        -(rate(x[1]["series_wins"], x[1]["series_total"]) or 0)
     ))
 
     for team_name, stat in sorted_teams:
-        bo3_ratio = rate(stat['bo3_full'], stat['bo3_total'])
-        bo5_ratio = rate(stat['bo5_full'], stat['bo5_total'])
-        series_win_ratio = rate(stat['series_wins'], stat['series_total'])
-        game_wins = stat.get('game_wins', 0)
-        game_total = stat.get('game_total', 0)
+        bo3_ratio = rate(stat["bo3_full"], stat["bo3_total"])
+        bo5_ratio = rate(stat["bo5_full"], stat["bo5_total"])
+        series_win_ratio = rate(stat["series_wins"], stat["series_total"])
+        game_wins = stat.get("game_wins", 0)
+        game_total = stat.get("game_total", 0)
         game_win_ratio = rate(game_wins, game_total)
         
-        streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat['streak_wins'] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat['streak_losses'] > 0 else '-')
-        last_date_display = stat['last_date'].strftime('%Y-%m-%d') if stat['last_date'] else '-'
+        streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat["streak_wins"] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat["streak_losses"] > 0 else "-")
+        last_date_display = stat["last_date"].strftime("%Y-%m-%d") if stat["last_date"] else "-"
         
-        bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat['bo3_total'] > 0 else '-'
-        bo5_text = f"{stat['bo5_full']}/{stat['bo5_total']}" if stat['bo5_total'] > 0 else '-'
-        series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat['series_total'] > 0 else '-'
-        game_text = f'{game_wins}-{game_total-game_wins}' if game_total > 0 else '-'
+        bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat["bo3_total"] > 0 else "-"
+        bo5_text = f"{stat['bo5_full']}/{stat['bo5_total']}" if stat["bo5_total"] > 0 else "-"
+        series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat["series_total"] > 0 else "-"
+        game_text = f"{game_wins}-{game_total-game_wins}" if game_total > 0 else "-"
 
-        html += f'''
+        html += f"""
             <tr>
                 <td class="team-col">{team_name}</td>
                 <td class="col-bo3" style="background:{'#f1f5f9' if stat['bo3_total'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['bo3_total'] == 0 else 'inherit'}">{bo3_text}</td>
@@ -254,10 +239,10 @@ for index, tournament in enumerate(TOURNAMENTS):
                 <td class="col-game-wr" style="background:{color_by_ratio(game_win_ratio)};color:{'white' if game_win_ratio is not None else '#cbd5e1'};font-weight:bold">{pct(game_win_ratio)}</td>
                 <td class="col-streak" style="background:{'#f1f5f9' if stat['streak_wins'] == 0 and stat['streak_losses'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['streak_wins'] == 0 and stat['streak_losses'] == 0 else 'inherit'}">{streak_display}</td>
                 <td class="col-last" style="background:{'#f1f5f9' if not stat['last_date'] else 'transparent'};color:{color_by_date(stat['last_date'], dates) if stat['last_date'] else '#cbd5e1'};font-weight:700">{last_date_display}</td>
-            </tr>'''
-    html += '</tbody></table></div>'
+            </tr>"""
+    html += "</tbody></table></div>"
 
-html += f'''
+html += f"""
 <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
 </div>
 <script>
@@ -285,8 +270,8 @@ html += f'''
             let valueB = rowB.cells[columnIndex].innerText;
             
             if (columnIndex === COL_LAST_DATE) {{ 
-                valueA = valueA === '-' ? 0 : new Date(valueA).getTime(); 
-                valueB = valueB === '-' ? 0 : new Date(valueB).getTime(); 
+                valueA = valueA === "-" ? 0 : new Date(valueA).getTime(); 
+                valueB = valueB === "-" ? 0 : new Date(valueB).getTime(); 
             }} else {{ 
                 valueA = parseValue(valueA);
                 valueB = parseValue(valueB); 
@@ -312,14 +297,14 @@ html += f'''
     }}
     
     function parseValue(value) {{
-        if (value === '-') return -1;
-        if (value.includes('%')) return parseFloat(value);
-        if (value.includes('/')) {{ 
-            let parts = value.split('/'); 
-            return parts[1] === '-' ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
+        if (value === "-") return -1;
+        if (value.includes("%")) return parseFloat(value);
+        if (value.includes("/")) {{ 
+            let parts = value.split("/"); 
+            return parts[1] === "-" ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
         }}
-        if (value.includes('-') && value.split('-').length === 2) {{
-            return parseFloat(value.split('-')[0]);
+        if (value.includes("-") && value.split("-").length === 2) {{
+            return parseFloat(value.split("-")[0]);
         }}
         const number = parseFloat(value);
         return isNaN(number) ? value.toLowerCase() : number;
@@ -328,9 +313,9 @@ html += f'''
 ```
 
 </body>
-</html>'''
-    INDEX_FILE.write_text(html, encoding='utf-8')
+</html>"""
+    INDEX_FILE.write_text(html, encoding="utf-8")
 
-if **name** == ‘**main**’:
-data = {tournament[‘slug’]: scrape(tournament) for tournament in TOURNAMENTS}
+if **name** == “**main**”:
+data = {tournament[“slug”]: scrape(tournament) for tournament in TOURNAMENTS}
 build(data)
