@@ -360,23 +360,13 @@
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
                     <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-25</td>
                 </tr></tbody></table></div>
-    <div class="footer">Updated: 2026-01-28 00:36:10 CST | <a href="https://github.com/closur3/lol" target="_blank">GitHub</a></div>
+    <div class="footer">Updated: 2026-01-28 00:38:40 CST | <a href="https://github.com/closur3/lol" target="_blank">GitHub</a></div>
     </div>
     <script>
         function doSort(n, id) {
             const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
-            const stateKey = 'data-sort-dir-' + n;
-            const currentDir = t.getAttribute(stateKey);
-            
-            let nextDir;
-            if (!currentDir) {
-                // 默认行为定义：
-                // n=0 (Team), n=1,2 (BO3), n=3,4 (BO5) 默认为升序 (asc)
-                // 其余 (Match, WR, Game, Streak, Date) 默认为降序 (desc)
-                nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
-            } else {
-                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
-            }
+            const currentDir = t.getAttribute('data-sort-dir-' + n) || 'desc';
+            const nextDir = currentDir === 'desc' ? 'asc' : 'desc';
             
             r.sort((a, b) => {
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
@@ -390,22 +380,15 @@
                 return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             });
             
-            t.setAttribute(stateKey, nextDir);
+            t.setAttribute('data-sort-dir-' + n, nextDir);
             r.forEach(row => b.appendChild(row));
         }
         function parse(v) {
             if (v === "-") return -1;
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) { 
-                let p = v.split('/'); 
-                return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
-            }
-            if (v.includes('-') && v.split('-').length === 2) {
-                // 处理 W-L 格式，排序时以胜场为主
-                return parseFloat(v.split('-')[0]);
-            }
-            const num = parseFloat(v);
-            return isNaN(num) ? v.toLowerCase() : num;
+            if (v.includes('/')) { let p = v.split('/'); return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); }
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
+            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
         }
     </script>
 </body>
