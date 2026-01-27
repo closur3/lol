@@ -215,6 +215,17 @@ h2 {
   font-size: 1.8rem;
 }
 
+h2 a {
+  color: #374151;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+h2 a:hover {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -297,7 +308,7 @@ function sortTable(n, tableId) {
     for idx, t in enumerate(TOURNAMENTS):
         stats = all_data[t["slug"]]
         table_id = f"table{idx}"
-        html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
+        html += f"<h2><a href='{t['url']}' target='_blank' style='color:#374151;text-decoration:none'>{t['title']}</a></h2><table id='{table_id}'>"
         html += "<tr>"
         headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
                    "Match","Match WR","Game","Game WR","Streak","Last Match"]
