@@ -129,46 +129,60 @@ def build_index_html(all_data):
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>LoL Tournament Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Stats Pro</title>
     <style>
         :root {{ --bg: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --primary: #3b82f6; }}
-        body {{ font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 1rem; line-height: 1.5; }}
+        body {{ font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 1rem; }}
         .container {{ max-width: 1400px; margin: 0 auto; }}
-        h1 {{ text-align: center; font-size: 1.8rem; margin: 1.5rem 0; color: #0f172a; }}
+        h1 {{ text-align: center; font-size: 1.8rem; margin: 1.5rem 0; }}
         
-        /* 移动端滑动核心修复 */
         .table-wrapper {{ 
             width: 100%; 
-            overflow-x: auto; /* 开启横向滚动 */
-            -webkit-overflow-scrolling: touch; /* iOS 丝滑滚动 */
+            overflow-x: auto; 
+            overflow-y: hidden;
             background: var(--card-bg);
             border-radius: 12px;
             border: 1px solid var(--border);
             margin-bottom: 2rem;
+            position: relative;
         }}
-        
-        .tournament-section {{ min-width: 100%; }}
-        .header-bar {{ padding: 1.2rem; border-bottom: 1px solid var(--border); sticky: left; }}
-        .header-bar h2 {{ margin: 0; font-size: 1.25rem; }}
-        .header-bar a {{ color: var(--text-main); text-decoration: none; }}
         
         table {{ 
             width: 100%; 
-            min-width: 1000px; /* 关键：强制表格在大屏以下保持宽度，从而触发 wrapper 的滚动 */
-            border-collapse: collapse; 
+            min-width: 1100px; /* 略微增加宽度以适配新的长表头 */
+            border-collapse: separate; /* 必须使用 separate 才能让 sticky 边框生效 */
+            border-spacing: 0;
             font-size: 0.85rem; 
+            table-layout: fixed; /* 固定布局确保列宽可控 */
         }}
         
-        th {{ background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; border-bottom: 2px solid var(--border); cursor: pointer; white-space: nowrap; }}
-        td {{ padding: 0.85rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        th {{ 
+            background: #f1f5f9; 
+            padding: 0.8rem; 
+            font-weight: 700; 
+            color: #475569; 
+            border-bottom: 2px solid var(--border); 
+            cursor: pointer; 
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }}
         
-        .team-name {{ text-align: left; font-weight: 800; position: sticky; left: 0; background: inherit; z-index: 10; border-right: 2px solid var(--border); }}
+        /* 强制表头点击区域 */
+        th span {{ display: block; width: 100%; }}
+
+        td {{ padding: 0.85rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }}
+        
+        /* 固定 Team 列 */
+        .col-team {{ width: 150px; position: sticky; left: 0; background: #fff; z-index: 30; border-right: 2px solid var(--border); text-align: left; font-weight: 800; }}
+        th.col-team {{ background: #f1f5f9; z-index: 40; }}
+
         .badge {{ color: white; font-weight: 800; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; }}
         .streak-w {{ background: #10b981; }}
         .streak-l {{ background: #f43f5e; }}
         
-        .footer {{ text-align: center; margin-top: 3rem; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }}
+        .footer {{ text-align: center; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }}
         .footer a {{ color: var(--primary); text-decoration: none; font-weight: 600; }}
     </style>
     <script>
@@ -207,20 +221,20 @@ def build_index_html(all_data):
         
         html += f"""
         <div class="table-wrapper">
-            <div class="header-bar">
-                <h2><a href="{t['url']}" target="_blank">{t['title']}</a></h2>
+            <div style="padding: 1.2rem; border-bottom: 1px solid var(--border); background: #fafafa;">
+                <h2 style="margin:0; font-size:1.2rem;"><a href="{t['url']}" target="_blank" style="color:inherit; text-decoration:none;">{t['title']}</a></h2>
             </div>
             <table id="{table_id}">
                 <thead>
                     <tr>
-                        <th onclick="sortTable(0, '{table_id}')">Team</th>
-                        <th onclick="sortTable(1, '{table_id}')">BO3 Full</th>
+                        <th class="col-team" onclick="sortTable(0, '{table_id}')">Team</th>
+                        <th onclick="sortTable(1, '{table_id}')">BO3</th>
                         <th onclick="sortTable(2, '{table_id}')">BO3%</th>
-                        <th onclick="sortTable(3, '{table_id}')">BO5 Full</th>
+                        <th onclick="sortTable(3, '{table_id}')">BO5</th>
                         <th onclick="sortTable(4, '{table_id}')">BO5%</th>
-                        <th onclick="sortTable(5, '{table_id}')">Match W-L</th>
+                        <th onclick="sortTable(5, '{table_id}')">Match</th>
                         <th onclick="sortTable(6, '{table_id}')">Match WR</th>
-                        <th onclick="sortTable(7, '{table_id}')">Game W-L</th>
+                        <th onclick="sortTable(7, '{table_id}')">Game</th>
                         <th onclick="sortTable(8, '{table_id}')">Game WR</th>
                         <th onclick="sortTable(9, '{table_id}')">Streak</th>
                         <th onclick="sortTable(10, '{table_id}')">Last Match</th>
@@ -243,7 +257,7 @@ def build_index_html(all_data):
 
             html += f"""
                 <tr>
-                    <td class="team-name">{team}</td>
+                    <td class="col-team">{team}</td>
                     <td style="color:{color_text_by_ratio(b3r, True)}">{s['bo3_full']}/{s['bo3_total']}</td>
                     <td style="background:{color_by_ratio(b3r, True)}; color:white; font-weight:800">{pct(b3r)}</td>
                     <td style="color:{color_text_by_ratio(b5r, True)}">{s['bo5_full']}/{s['bo5_total']}</td>
@@ -259,8 +273,7 @@ def build_index_html(all_data):
 
     html += f"""
         <div class="footer">
-            最后更新: {last_update} | 
-            <a href="{GITHUB_REPO}" target="_blank">GitHub Repo</a>
+            最后更新: {last_update} | <a href="{GITHUB_REPO}" target="_blank">GitHub Repo</a>
         </div>
     </div>
 </body>
@@ -270,4 +283,3 @@ def build_index_html(all_data):
 if __name__ == "__main__":
     data = {t["slug"]: scrape_tournament(t) for t in TOURNAMENTS}
     build_index_html(data)
-    print("Mobile-friendly index.html created!")
