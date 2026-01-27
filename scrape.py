@@ -50,23 +50,40 @@ def scrape(t):
     try:
         r = requests.get(t["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
-    except: return {}
+    except: return {"stats": {}, "upcoming": []}
+
     stats = defaultdict(lambda: {"bo3_f": 0, "bo3_t": 0, "bo5_f": 0, "bo5_t": 0, "m_w": 0, "m_t": 0, "g_w": 0, "g_t": 0, "sw": 0, "sl": 0, "sd": False, "ld": None})
+    upcoming = []
+    now_dt = datetime.now()
+
     for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
+        
         t1, t2 = get_short_name(tds[1].text.strip()), get_short_name(tds[3].text.strip())
-        sc = tds[2].text.strip()
-        try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
+        sc = tds[2].text.strip().lower()
+        date_str = tds[-1].text.strip()
+        try: dt = datetime.strptime(date_str, "%Y-%m-%d")
         except: dt = None
+
+        # --- 识别赛程预告 ---
+        if "vs" in sc or not sc:
+            if dt and dt >= now_dt.replace(hour=0, minute=0, second=0):
+                upcoming.append({"t1": t1, "t2": t2, "date": date_str})
+            continue
+
+        # --- 历史统计逻辑 ---
         if "-" not in sc: continue
         try: s1, s2 = map(int, sc.split("-"))
         except: continue
+        
         win, los = (t1, t2) if s1 > s2 else (t2, t1)
         for t_ in (t1, t2):
             if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
             stats[t_]["m_t"] += 1; stats[t_]["g_t"] += (s1+s2)
+        
         stats[win]["m_w"] += 1; stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
+        
         mx, mn = max(s1, s2), min(s1, s2)
         if mx == 2:
             for t_ in (t1, t2): stats[t_]["bo3_t"] += 1
@@ -76,13 +93,19 @@ def scrape(t):
             for t_ in (t1, t2): stats[t_]["bo5_t"] += 1
             if mn == 2: 
                 for t_ in (t1, t2): stats[t_]["bo5_f"] += 1
-        if not stats[win]["sd"]:
-            if stats[win]["sl"] > 0: stats[win]["sd"] = True
-            else: stats[win]["sw"] += 1
-        if not stats[los]["sd"]:
-            if stats[los]["sw"] > 0: stats[los]["sd"] = True
-            else: stats[los]["sl"] += 1
-    return stats
+        
+        # 连胜/连败处理
+        for t_ in (win, los):
+            if not stats[t_]["sd"]:
+                if t_ == win:
+                    if stats[t_]["sl"] > 0: stats[t_]["sd"] = True
+                    else: stats[t_]["sw"] += 1
+                else:
+                    if stats[t_]["sw"] > 0: stats[t_]["sd"] = True
+                    else: stats[t_]["sl"] += 1
+
+    upcoming.sort(key=lambda x: x['date'])
+    return {"stats": stats, "upcoming": upcoming[:8]}
 
 # ---------- 生成 HTML ----------
 def build(all_data):
@@ -94,15 +117,25 @@ def build(all_data):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoL Insights Pro</title>
     <style>
-        body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
-        .main-header {{ text-align: center; padding: 25px 0; }}
-        .main-header h1 {{ margin: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
-        .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
-        .table-title a {{ color: #2563eb; text-decoration: none; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; color: #1e293b; }}
+        .main-header {{ text-align: center; padding: 20px 0; }}
+        .main-header h1 {{ margin: 0; font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        
+        /* 预告卡片样式 */
+        .upcoming-scroll {{ display: flex; gap: 12px; overflow-x: auto; padding: 5px 2px 15px 2px; scrollbar-width: none; }}
+        .upcoming-scroll::-webkit-scrollbar {{ display: none; }}
+        .match-card {{ background: white; min-width: 180px; padding: 12px; border-radius: 10px; border-left: 4px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex-shrink: 0; }}
+        .match-card .date {{ font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600; }}
+        .match-card .vs {{ display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700; }}
+        .match-card .vs i {{ color: #cbd5e1; font-style: normal; font-size: 10px; margin: 0 4px; }}
+
+        /* 表格样式 */
+        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; border: 1px solid #e2e8f0; }}
+        .table-title {{ padding: 15px; font-weight: 800; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }}
+        .table-title a {{ color: #2563eb; text-decoration: none; font-size: 1.1rem; }}
         table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }}
-        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }}
-        th:hover {{ background: #eff6ff; color: #2563eb; }}
+        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; }}
         td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }}
         .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
@@ -111,15 +144,34 @@ def build(all_data):
 </head>
 <body>
     <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
-    <div style="max-width:1400px; margin:0 auto">"""
+    <div class="container">"""
 
     for idx, t in enumerate(TOURNAMENTS):
-        st = all_data.get(t["slug"], {})
+        tournament_data = all_data.get(t["slug"], {"stats": {}, "upcoming": []})
+        st = tournament_data["stats"]
+        up = tournament_data["upcoming"]
         tid = f"t{idx}"
         dates = [s["ld"] for s in st.values() if s["ld"]]
+
+        # --- 渲染预告区域 ---
+        if up:
+            html += f'<div style="margin-bottom:10px; font-weight:700; color:#475569; font-size:14px;">📅 {t["title"]} 近期赛程</div>'
+            html += '<div class="upcoming-scroll">'
+            for m in up:
+                html += f"""
+                <div class="match-card">
+                    <div class="date">{m['date']}</div>
+                    <div class="vs"><span>{m['t1']}</span><i>VS</i><span>{m['t2']}</span></div>
+                </div>"""
+            html += '</div>'
+
+        # --- 渲染数据表格 ---
         html += f"""
         <div class="wrapper">
-            <div class="table-title"><a href="{t['url']}" target="_blank">{t['title']}</a></div>
+            <div class="table-title">
+                <a href="{t['url']}" target="_blank">{t['title']} 积分榜</a>
+                <span style="font-size:10px; color:#94a3b8; font-weight:400;">点击表头排序</span>
+            </div>
             <table id="{tid}">
                 <thead>
                     <tr>
@@ -138,7 +190,6 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        # 排序权重逻辑
         sorted_teams = sorted(st.items(), key=lambda x: (
             rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
             -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
@@ -146,16 +197,14 @@ def build(all_data):
 
         for team, s in sorted_teams:
             b3r, b5r, mwr = rate(s["bo3_f"], s["bo3_t"]), rate(s["bo5_f"], s["bo5_t"]), rate(s["m_w"], s["m_t"])
-            g_win, g_total = s.get('g_w',0), s.get('g_t',0)
-            gwr = rate(g_win, g_total)
+            gwr = rate(s['g_w'], s['g_t'])
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
             
-            # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
             bo3_txt = f"{s['bo3_f']}/{s['bo3_t']}" if s['bo3_t'] > 0 else "-"
             bo5_txt = f"{s['bo5_f']}/{s['bo5_t']}" if s['bo5_t'] > 0 else "-"
             match_txt = f"{s['m_w']}-{s['m_t']-s['m_w']}" if s['m_t'] > 0 else "-"
-            game_txt = f"{g_win}-{g_total-g_win}" if g_total > 0 else "-"
+            game_txt = f"{s['g_w']}-{s['g_t']-s['g_w']}" if s['g_t'] > 0 else "-"
 
             html += f"""
                 <tr>
@@ -174,20 +223,15 @@ def build(all_data):
         html += "</tbody></table></div>"
 
     html += f"""
-    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
+    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank" style="color:#64748b">GitHub Source</a></div>
     </div>
     <script>
         function doSort(n, id) {{
             const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
             const stateKey = 'data-sort-dir-' + n;
             const currentDir = t.getAttribute(stateKey);
-            
-            let nextDir;
-            if (!currentDir) {{
-                nextDir = (n === 0) ? 'asc' : 'desc';
-            }} else {{
-                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
-            }}
+            let nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            if (!currentDir && n === 0) nextDir = 'asc';
             
             r.sort((a, b) => {{
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
@@ -211,10 +255,7 @@ def build(all_data):
                 let p = v.split('/'); 
                 return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
             }}
-            if (v.includes('-') && v.split('-').length === 2) {{
-                // W-L 格式排序：以胜场为主
-                return parseFloat(v.split('-')[0]);
-            }}
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
             const num = parseFloat(v);
             return isNaN(num) ? v.toLowerCase() : num;
         }}
