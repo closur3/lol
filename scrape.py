@@ -52,7 +52,12 @@ def scrape(t):
         soup = BeautifulSoup(r.text, "html.parser")
     except: return {}
     stats = defaultdict(lambda: {"bo3_f": 0, "bo3_t": 0, "bo5_f": 0, "bo5_t": 0, "m_w": 0, "m_t": 0, "g_w": 0, "g_t": 0, "sw": 0, "sl": 0, "sd": False, "ld": None})
-    for row in soup.select("table tr"):
+    
+    # 锁定主表格，防止数据翻倍
+    main_table = soup.find("table", class_="table-condensed")
+    if not main_table: return {}
+    
+    for row in main_table.find_all("tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
         t1, t2 = get_short_name(tds[1].text.strip()), get_short_name(tds[3].text.strip())
@@ -80,7 +85,7 @@ def scrape(t):
             if stats[win]["sl"] > 0: stats[win]["sd"] = True
             else: stats[win]["sw"] += 1
         if not stats[los]["sd"]:
-            if stats[los]["sw"] > 0: stats[los]["sd"] = True
+            if stats[los]["sw"] > 0: stats[los]["sw"] = True # 修复：连败逻辑微调
             else: stats[los]["sl"] += 1
     return stats
 
@@ -138,7 +143,6 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        # 初始排序：None 视为 -1.0
         sorted_teams = sorted(st.items(), key=lambda x: (
             rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
             -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
@@ -151,16 +155,22 @@ def build(all_data):
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
             
+            # 格式化显示：如果分母为0，整列显示 "-"
+            bo3_str = f"{s['bo3_f']}/{s['bo3_t']}" if s['bo3_t'] > 0 else "-"
+            bo5_str = f"{s['bo5_f']}/{s['bo5_t']}" if s['bo5_t'] > 0 else "-"
+            match_str = f"{s['m_w']}-{s['m_t']-s['m_w']}" if s['m_t'] > 0 else "-"
+            game_str = f"{g_win}-{g_total-g_win}" if g_total > 0 else "-"
+
             html += f"""
                 <tr>
                     <td class="team-col">{team}</td>
-                    <td>{s['bo3_f']}/{s['bo3_t'] if s['bo3_t']>0 else '-'}</td>
+                    <td>{bo3_str}</td>
                     <td style="background:{color_by_ratio(b3r,True)};color:{'white' if b3r is not None else '#cbd5e1'};font-weight:bold">{pct(b3r)}</td>
-                    <td>{s['bo5_f']}/{s['bo5_t'] if s['bo5_t']>0 else '-'}</td>
+                    <td>{bo5_str}</td>
                     <td style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
-                    <td>{s['m_w']}-{s['m_t']-s['m_w']}</td>
+                    <td>{match_str}</td>
                     <td style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
-                    <td>{g_win}-{g_total-g_win}</td>
+                    <td>{game_str}</td>
                     <td style="background:{color_by_ratio(gwr)};color:{'white' if gwr is not None else '#cbd5e1'};font-weight:bold">{pct(gwr)}</td>
                     <td>{stk}</td>
                     <td style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
@@ -178,9 +188,6 @@ def build(all_data):
             
             let nextDir;
             if (!currentDir) {{
-                // 默认行为定义：
-                // n=0 (Team), n=1,2 (BO3), n=3,4 (BO5) 默认为升序 (asc)
-                // 其余 (Match, WR, Game, Streak, Date) 默认为降序 (desc)
                 nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
             }} else {{
                 nextDir = currentDir === 'desc' ? 'asc' : 'desc';
@@ -209,7 +216,6 @@ def build(all_data):
                 return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
             }}
             if (v.includes('-') && v.split('-').length === 2) {{
-                // 处理 W-L 格式，排序时以胜场为主
                 return parseFloat(v.split('-')[0]);
             }}
             const num = parseFloat(v);
