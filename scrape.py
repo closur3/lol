@@ -12,8 +12,9 @@ TOURNAMENTS = [
 ]
 INDEX_FILE = Path("index.html")
 TEAMS_JSON = Path("teams.json")
+GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 队名处理器 (回归精准与基础过滤) ----------
+# ---------- 队名映射处理器 ----------
 def load_team_map():
     if TEAMS_JSON.exists():
         try: return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
@@ -23,15 +24,13 @@ def load_team_map():
 TEAM_MAP = load_team_map()
 
 def get_short_name(full_name):
-    name = full_name.strip()
-    # 优先精准映射
-    if name in TEAM_MAP:
-        return TEAM_MAP[name]
-    # 仅做关键字屏蔽
-    return name.replace("Esports", "").replace("Gaming", "").replace("Team", "").strip()
+    name_upper = full_name.upper()
+    for key, short_val in TEAM_MAP.items():
+        if key.upper() in name_upper: return short_val
+    return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
 # ---------- 辅助函数 ----------
-def rate(n, d): return n / d if d > 0 else None
+def rate(n, d): return n / d if d > 0 else None 
 def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
 def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
 
@@ -52,35 +51,22 @@ def scrape(t):
         r = requests.get(t["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
     except: return {}
-    
-    # 使用更精准的表格定位防止重复抓取
-    main_table = soup.find("table", class_="table-condensed")
-    if not main_table: return {}
-    
     stats = defaultdict(lambda: {"bo3_f": 0, "bo3_t": 0, "bo5_f": 0, "bo5_t": 0, "m_w": 0, "m_t": 0, "g_w": 0, "g_t": 0, "sw": 0, "sl": 0, "sd": False, "ld": None})
-    
-    for row in main_table.find_all("tr"):
+    for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
-        
-        t1 = get_short_name(tds[1].text)
-        t2 = get_short_name(tds[3].text)
+        t1, t2 = get_short_name(tds[1].text.strip()), get_short_name(tds[3].text.strip())
         sc = tds[2].text.strip()
-        
         try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
         except: dt = None
-            
         if "-" not in sc: continue
         try: s1, s2 = map(int, sc.split("-"))
         except: continue
-            
         win, los = (t1, t2) if s1 > s2 else (t2, t1)
         for t_ in (t1, t2):
             if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
             stats[t_]["m_t"] += 1; stats[t_]["g_t"] += (s1+s2)
-            
         stats[win]["m_w"] += 1; stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
-        
         mx, mn = max(s1, s2), min(s1, s2)
         if mx == 2:
             for t_ in (t1, t2): stats[t_]["bo3_t"] += 1
@@ -90,7 +76,6 @@ def scrape(t):
             for t_ in (t1, t2): stats[t_]["bo5_t"] += 1
             if mn == 2: 
                 for t_ in (t1, t2): stats[t_]["bo5_f"] += 1
-                
         if not stats[win]["sd"]:
             if stats[win]["sl"] > 0: stats[win]["sd"] = True
             else: stats[win]["sw"] += 1
@@ -99,7 +84,7 @@ def scrape(t):
             else: stats[los]["sl"] += 1
     return stats
 
-# ---------- 生成 HTML (含差异化默认排序) ----------
+# ---------- 生成 HTML ----------
 def build(all_data):
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S CST")
     html = f"""<!DOCTYPE html>
@@ -153,11 +138,15 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        sorted_teams = sorted(st.items(), key=lambda x: (rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0, -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)))
+        # 初始排序：None 视为 -1.0
+        sorted_teams = sorted(st.items(), key=lambda x: (
+            rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
+            -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
+        ))
 
         for team, s in sorted_teams:
             b3r, b5r, mwr = rate(s["bo3_f"], s["bo3_t"]), rate(s["bo5_f"], s["bo5_t"]), rate(s["m_w"], s["m_t"])
-            g_win, g_total = s.get('g_w', 0), s.get('g_t', 0)
+            g_win, g_total = s.get('g_w',0), s.get('g_t',0)
             gwr = rate(g_win, g_total)
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
@@ -179,31 +168,52 @@ def build(all_data):
         html += "</tbody></table></div>"
 
     html += f"""
-    <div class="footer">Updated: {now}</div>
+    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
     </div>
     <script>
         function doSort(n, id) {{
             const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
             const stateKey = 'data-sort-dir-' + n;
             const currentDir = t.getAttribute(stateKey);
-            let nextDir = currentDir ? (currentDir === 'desc' ? 'asc' : 'desc') : ((n >= 0 && n <= 4) ? 'asc' : 'desc');
+            
+            let nextDir;
+            if (!currentDir) {{
+                // 默认行为定义：
+                // n=0 (Team), n=1,2 (BO3), n=3,4 (BO5) 默认为升序 (asc)
+                // 其余 (Match, WR, Game, Streak, Date) 默认为降序 (desc)
+                nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
+            }} else {{
+                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            }}
             
             r.sort((a, b) => {{
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
-                if (n === 10) {{ x = x === "-" ? 0 : new Date(x).getTime(); y = y === "-" ? 0 : new Date(y).getTime(); }}
-                else {{ x = parse(x); y = parse(y); }}
+                if (n === 10) {{ 
+                    x = x === "-" ? 0 : new Date(x).getTime(); 
+                    y = y === "-" ? 0 : new Date(y).getTime(); 
+                }} else {{ 
+                    x = parse(x); y = parse(y); 
+                }}
                 if (x === y) return 0;
                 return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             }});
+            
             t.setAttribute(stateKey, nextDir);
             r.forEach(row => b.appendChild(row));
         }}
         function parse(v) {{
             if (v === "-") return -1;
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) {{ let p = v.split('/'); return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); }}
-            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
-            const num = parseFloat(v); return isNaN(num) ? v.toLowerCase() : num;
+            if (v.includes('/')) {{ 
+                let p = v.split('/'); 
+                return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
+            }}
+            if (v.includes('-') && v.split('-').length === 2) {{
+                // 处理 W-L 格式，排序时以胜场为主
+                return parseFloat(v.split('-')[0]);
+            }}
+            const num = parseFloat(v);
+            return isNaN(num) ? v.toLowerCase() : num;
         }}
     </script>
 </body>
