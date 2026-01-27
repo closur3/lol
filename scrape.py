@@ -138,9 +138,10 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        # --- 初始排序逻辑：按 BO3% 升序排列 (None 视为 2.0 放在最后) ---
+        # 排序权重逻辑
         sorted_teams = sorted(st.items(), key=lambda x: (
-            rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else 2.0
+            rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
+            -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
         ))
 
         for team, s in sorted_teams:
@@ -150,6 +151,7 @@ def build(all_data):
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
             
+            # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
             bo3_txt = f"{s['bo3_f']}/{s['bo3_t']}" if s['bo3_t'] > 0 else "-"
             bo5_txt = f"{s['bo5_f']}/{s['bo5_t']}" if s['bo5_t'] > 0 else "-"
             match_txt = f"{s['m_w']}-{s['m_t']-s['m_w']}" if s['m_t'] > 0 else "-"
@@ -178,7 +180,14 @@ def build(all_data):
         function doSort(n, id) {{
             const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
             const stateKey = 'data-sort-dir-' + n;
-            const dir = t.getAttribute(stateKey) === 'asc' ? 'desc' : 'asc';
+            const currentDir = t.getAttribute(stateKey);
+            
+            let nextDir;
+            if (!currentDir) {{
+                nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
+            }} else {{
+                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            }}
             
             r.sort((a, b) => {{
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
@@ -189,11 +198,10 @@ def build(all_data):
                     x = parse(x); y = parse(y); 
                 }}
                 if (x === y) return 0;
-                return dir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
+                return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             }});
             
-            // 简单重置并设置当前方向
-            t.setAttribute(stateKey, dir);
+            t.setAttribute(stateKey, nextDir);
             r.forEach(row => b.appendChild(row));
         }}
         function parse(v) {{
@@ -204,6 +212,7 @@ def build(all_data):
                 return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
             }}
             if (v.includes('-') && v.split('-').length === 2) {{
+                // W-L 格式排序：以胜场为主
                 return parseFloat(v.split('-')[0]);
             }}
             const num = parseFloat(v);
