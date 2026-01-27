@@ -186,11 +186,10 @@ def build_md_backup(t, stats):
     return md_file
 
 def build_index_html(all_data):
-    from datetime import datetime
-    import pytz
+    from datetime import datetime, timezone, timedelta
     
-    # 获取CST时间
-    cst = pytz.timezone('Asia/Shanghai')
+    # 获取CST时间 (UTC+8)
+    cst = timezone(timedelta(hours=8))
     now_cst = datetime.now(cst)
     last_update = now_cst.strftime("%Y-%m-%d %H:%M:%S CST")
     
