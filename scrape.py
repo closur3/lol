@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from collections import defaultdict
 from pathlib import Path
+from datetime import datetime
 
 # ================== 赛事配置（唯一来源） ==================
 TOURNAMENTS = [
@@ -51,6 +52,19 @@ def color_by_streak(r):
         green = int(204 - intensity * 166)
         return f"rgb({red}, {green}, 21)"  # 黄色到红色
 
+def parse_date(date_str):
+    """解析日期字符串，返回datetime对象"""
+    try:
+        # 尝试多种日期格式
+        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"]:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except ValueError:
+                continue
+        return None
+    except:
+        return None
+
 # ---------- 抓取 ----------
 def scrape_tournament(t):
     resp = requests.get(t["url"], timeout=15)
@@ -64,12 +78,17 @@ def scrape_tournament(t):
         "game_win": 0, "game_total": 0,
         "streak_w": 0, "streak_l": 0,
         "streak_done": False,
+        "last_match_date": None,
     })
 
     for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5:
             continue
+
+        # 提取日期（通常在第一列）
+        date_str = tds[0].get_text(strip=True)
+        match_date = parse_date(date_str)
 
         t1 = tds[1].get_text(strip=True)
         t2 = tds[3].get_text(strip=True)
@@ -84,6 +103,12 @@ def scrape_tournament(t):
             continue
 
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
+
+        # 更新最后比赛日期
+        for t_ in (t1, t2):
+            if match_date:
+                if stats[t_]["last_match_date"] is None or match_date > stats[t_]["last_match_date"]:
+                    stats[t_]["last_match_date"] = match_date
 
         # 大场统计
         for t_ in (t1, t2):
@@ -132,8 +157,8 @@ def build_md_backup(t, stats):
     md_file = OUTPUT_DIR / f"{t['slug']}.md"
     lines = []
     lines.append(f"# {t['title']}\n")
-    lines.append("| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak |")
-    lines.append("|------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|")
+    lines.append("| Team | BO3 | FulRT | BO5 | FulRT | Match | WinRT | Game | WinRT | Streak | Date |")
+    lines.append("|------|-----|-------|-----|-------|-------|-------|------|-------|--------|------|")
 
     for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
         bo3_r = rate(s["bo3_full"], s["bo3_total"])
@@ -147,13 +172,15 @@ def build_md_backup(t, stats):
         elif s["streak_l"] > 0:
             streak = f"{s['streak_l']}L"
 
+        last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
+
         lines.append(
             f"| {team} | "
             f"{s['bo3_full']}/{s['bo3_total']} | {pct(bo3_r)} | "
             f"{s['bo5_full']}/{s['bo5_total']} | {pct(bo5_r)} | "
             f"{s['match_win']}-{s['match_total']-s['match_win']} | {pct(match_wr)} | "
             f"{s['game_win']}-{s['game_total']-s['game_win']} | {pct(game_wr)} | "
-            f"{streak} |"
+            f"{streak} | {last_match} |"
         )
     md_file.write_text("\n".join(lines), encoding="utf-8")
     return md_file
@@ -236,7 +263,7 @@ td:first-child {
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 </style>
@@ -272,8 +299,8 @@ function sortTable(n, tableId) {
         table_id = f"table{idx}"
         html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
         html += "<tr>"
-        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
-                   "Match","Match WR","Game","Game WR","Streak"]
+        headers = ["Team","BO3","FulRT","BO5","FulRT",
+                   "Match","WinRT","Game","WinRT","Streak","Date"]
         for i,h in enumerate(headers):
             html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
         html += "</tr>"
@@ -293,6 +320,8 @@ function sortTable(n, tableId) {
                 streak = f"{s['streak_l']}L"
                 streak_color = color_streak_wl("L")
 
+            last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
+
             html += "<tr>"
             html += f"<td>{team}</td>"
             html += f"<td>{s['bo3_full']}/{s['bo3_total']}</td>"
@@ -304,6 +333,7 @@ function sortTable(n, tableId) {
             html += f"<td>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
             html += f"<td>{pct(game_wr)}</td>"
             html += f"<td style='background:{streak_color};color:white;font-weight:700;font-size:1.1em'>{streak}</td>"
+            html += f"<td style='color:#6b7280;font-size:0.9em'>{last_match}</td>"
             html += "</tr>"
         html += "</table>"
     html += "</div></body></html>"
