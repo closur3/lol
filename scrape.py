@@ -14,48 +14,40 @@ INDEX_FILE = Path("index.html")
 TEAMS_JSON = Path("teams.json")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 队名映射处理器 ----------
+# ---------- 队名映射处理器 (支持模糊匹配) ----------
 def load_team_map():
     if TEAMS_JSON.exists():
         try:
             return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
-        except Exception as e:
-            print(f"Error loading JSON: {e}")
+        except: pass
     return {}
 
 TEAM_MAP = load_team_map()
 
 def get_short_name(full_name):
-    """
-    队名优化逻辑：
-    1. 优先使用 JSON 映射
-    2. 映射不存在时，自动移除常见后缀
-    """
-    if full_name in TEAM_MAP:
-        return TEAM_MAP[full_name]
-    
-    # 自动清洗逻辑
-    short = full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
-    return short
+    # 1. 模糊匹配逻辑：只要 JSON 里的 key 在全称里出现过，就使用对应的缩写
+    name_upper = full_name.upper()
+    for key, short_val in TEAM_MAP.items():
+        if key.upper() in name_upper:
+            return short_val
+    # 2. 兜底清洗
+    return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
-# ---------- 颜色与辅助逻辑 ----------
+# ---------- 辅助函数 ----------
+def rate(n, d): return n / d if d > 0 else 0.0 # 修改：默认回退到 0.0 而非 999
+def pct(r): return f"{r*100:.1f}%"
 def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
 def color_by_ratio(r, rev=False):
-    if r is None: return "#f3f4f6"
     h = (1 - max(0, min(1, r))) * 140 if rev else max(0, min(1, r)) * 140
     return get_hsl(h, s=65, l=48)
 def color_text_by_ratio(r, rev=False):
-    if r is None: return "#6b7280"
     h = (1 - max(0, min(1, r))) * 140 if rev else max(0, min(1, r)) * 140
     return get_hsl(h, s=80, l=35)
 def color_by_date(d, dates):
     if not d or not dates: return "#9ca3af"
     mx, mn = max(dates), min(dates)
-    if mx == mn: return "#3b82f6"
-    f = (d - mn).total_seconds() / (mx - mn).total_seconds()
+    f = (d - mn).total_seconds() / (mx - mn).total_seconds() if mx != mn else 1
     return f"hsl(215, {int(f * 80 + 20)}%, {int(55 - f * 15)}%)"
-def rate(n, d): return n / d if d > 0 else None
-def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
 
 # ---------- 抓取逻辑 ----------
 def scrape(t):
@@ -67,8 +59,8 @@ def scrape(t):
     for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
-        t1_full, sc, t2_full = tds[1].text.strip(), tds[2].text.strip(), tds[3].text.strip()
-        t1, t2 = get_short_name(t1_full), get_short_name(t2_full)
+        t1_raw, sc, t2_raw = tds[1].text.strip(), tds[2].text.strip(), tds[3].text.strip()
+        t1, t2 = get_short_name(t1_raw), get_short_name(t2_raw)
         try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
         except: dt = None
         if "-" not in sc: continue
@@ -78,8 +70,7 @@ def scrape(t):
         for t_ in (t1, t2):
             if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
             stats[t_]["m_t"] += 1; stats[t_]["g_t"] += (s1+s2)
-        stats[win]["m_w"] += 1; stats[t1]["game_win"] = stats[t1].get("game_win",0)+s1; stats[t2]["game_win"] = stats[t2].get("game_win",0)+s2
-        stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
+        stats[win]["m_w"] += 1; stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
         mx, mn = max(s1, s2), min(s1, s2)
         if mx == 2:
             for t_ in (t1, t2): stats[t_]["bo3_t"] += 1
@@ -105,20 +96,17 @@ def build(all_data):
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Insights</title>
+    <title>LoL Insights Pro</title>
     <style>
         body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
         .main-header {{ text-align: center; padding: 25px 0; }}
-        .main-header h1 {{ 
-            margin: 0; font-size: 2.4rem; font-weight: 800; 
-            background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }}
+        .main-header h1 {{ margin: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
         .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
         .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
         .table-title a {{ color: #2563eb; text-decoration: none; }}
         table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }}
-        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; }}
+        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }}
+        th:hover {{ background: #eff6ff; color: #2563eb; }}
         td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }}
         .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
@@ -136,7 +124,7 @@ def build(all_data):
         html += f"""
         <div class="wrapper">
             <div class="table-title"><a href="{t['url']}" target="_blank">{t['title']}</a></div>
-            <table id="{tid}">
+            <table id="{tid}" data-dir="asc">
                 <thead>
                     <tr>
                         <th class="team-col" onclick="doSort(0, '{tid}')">Team</th>
@@ -154,7 +142,8 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
-        sorted_teams = sorted(st.items(), key=lambda x: (rate(x[1]["bo3_f"], x[1]["bo3_t"]) or 999, -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)))
+        # 初始排序修正：0.0 会排在前面（升序）
+        sorted_teams = sorted(st.items(), key=lambda x: (rate(x[1]["bo3_f"], x[1]["bo3_t"]), -(rate(x[1]["m_w"], x[1]["m_t"]))))
 
         for team, s in sorted_teams:
             b3r, b5r, mwr, gwr = rate(s["bo3_f"], s["bo3_t"]), rate(s["bo5_f"], s["bo5_t"]), rate(s["m_w"], s["m_t"]), rate(s["g_w"], s["g_t"])
@@ -163,13 +152,13 @@ def build(all_data):
             html += f"""
                 <tr>
                     <td class="team-col">{team}</td>
-                    <td style="color:{color_text_by_ratio(b3r,True)}">{s['bo3_f']}/{s['bo3_t']}</td>
+                    <td>{s['bo3_f']}/{s['bo3_t']}</td>
                     <td style="background:{color_by_ratio(b3r,True)};color:white;font-weight:bold">{pct(b3r)}</td>
-                    <td style="color:{color_text_by_ratio(b5r,True)}">{s['bo5_f']}/{s['bo5_t']}</td>
+                    <td>{s['bo5_f']}/{s['bo5_t']}</td>
                     <td style="background:{color_by_ratio(b5r,True)};color:white;font-weight:bold">{pct(b5r)}</td>
-                    <td style="color:{color_text_by_ratio(mwr)}">{s['m_w']}-{s['m_t']-s['m_w']}</td>
+                    <td>{s['m_w']}-{s['m_t']-s['m_w']}</td>
                     <td style="background:{color_by_ratio(mwr)};color:white;font-weight:bold">{pct(mwr)}</td>
-                    <td style="color:{color_text_by_ratio(gwr)}">{s['g_w']}-{s['g_t']-s['g_w']}</td>
+                    <td>{s['g_w']}-{s['g_t']-s['g_w']}</td>
                     <td style="background:{color_by_ratio(gwr)};color:white;font-weight:bold">{pct(gwr)}</td>
                     <td>{stk}</td>
                     <td style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
@@ -181,21 +170,32 @@ def build(all_data):
     </div>
     <script>
         function doSort(n, id) {{
-            const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows), isAsc = t.dataset.dir === 'asc';
+            const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
+            // 核心修复：如果当前是 asc 就变 desc，如果是 desc 就变 asc。
+            // 确保第一次点击后，data-dir 被设置为对应的方向
+            const currentDir = t.getAttribute('data-sort-dir-' + n) || 'desc';
+            const nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            
             r.sort((a, b) => {{
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
-                if (n === 10) {{ x = x === "-" ? 0 : new Date(x).getTime(); y = y === "-" ? 0 : new Date(y).getTime(); }}
-                else {{ x = parse(x); y = parse(y); }}
-                return isAsc ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
+                if (n === 10) {{ 
+                    x = x === "-" ? 0 : new Date(x).getTime(); 
+                    y = y === "-" ? 0 : new Date(y).getTime(); 
+                }} else {{ 
+                    x = parse(x); y = parse(y); 
+                }}
+                if (x === y) return 0;
+                return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             }});
-            t.dataset.dir = isAsc ? 'desc' : 'asc';
+            
+            t.setAttribute('data-sort-dir-' + n, nextDir);
             r.forEach(row => b.appendChild(row));
         }}
         function parse(v) {{
-            if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) return v.split('/').reduce((a,b)=>a/b);
-            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
-            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
+            if (v.includes('%')) return parseFloat(v) || 0;
+            if (v.includes('/')) {{ let p = v.split('/'); return parseFloat(p[0])/parseFloat(p[1]) || 0; }}
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]) || 0;
+            const n = parseFloat(v); return isNaN(n) ? v.toLowerCase() : n;
         }}
     </script>
 </body>
@@ -205,4 +205,4 @@ def build(all_data):
 if __name__ == "__main__":
     data = {t["slug"]: scrape(t) for t in TOURNAMENTS}
     build(data)
-    print("Success: Data loaded with team name mapping!")
+    print("Success: Data sorted correctly (0% at top for ASC)!")
