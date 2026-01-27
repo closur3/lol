@@ -1,63 +1,52 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LOL 赛事深度统计</title>
+    <title>LoL Tournament Stats Dashboard</title>
     <style>
-        :root {
-            --bg: #f8fafc;
-            --card-bg: #ffffff;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border: #e2e8f0;
-        }
-        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 2rem; }
+        :root { --bg: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --primary: #3b82f6; }
+        body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 2rem; line-height: 1.5; }
         .container { max-width: 1440px; margin: 0 auto; }
-        h1 { text-align: center; font-size: 2.5rem; font-weight: 800; margin-bottom: 2rem; color: #1e293b; }
-        .tournament-section { background: var(--card-bg); border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); margin-bottom: 3rem; overflow: hidden; border: 1px solid var(--border); }
-        .header-bar { padding: 1.5rem; border-bottom: 1px solid var(--border); background: #fcfcfc; display: flex; justify-content: space-between; align-items: center; }
-        .header-bar h2 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+        h1 { text-align: center; font-size: 2.25rem; font-weight: 800; margin-bottom: 2rem; color: #0f172a; }
+        .tournament-section { background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 3rem; overflow: hidden; border: 1px solid var(--border); }
+        .header-bar { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: #fafafa; }
+        .header-bar h2 { margin: 0; font-size: 1.4rem; font-weight: 700; }
+        .header-bar h2 a { color: var(--text-main); text-decoration: none; transition: color 0.2s; }
+        .header-bar h2 a:hover { color: var(--primary); text-decoration: underline; }
         
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th { background: #f1f5f9; padding: 1rem; text-align: center; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th { background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 0.75rem; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; }
         th:hover { background: #e2e8f0; }
-        td { padding: 1rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+        td { padding: 0.9rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
         tr:hover td { background-color: #f8fafc; }
         
-        .team-name { text-align: left; font-weight: 800; color: #1e293b; min-width: 140px; }
-        .badge { color: white; font-weight: 800; border-radius: 6px; padding: 4px 10px; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .team-name { text-align: left; font-weight: 800; color: #0f172a; min-width: 140px; }
+        .badge { color: white; font-weight: 800; border-radius: 6px; padding: 4px 10px; font-size: 0.82rem; }
         .streak-w { background: #10b981; }
         .streak-l { background: #f43f5e; }
-        .footer { text-align: center; margin-top: 3rem; color: var(--text-muted); font-size: 0.85rem; padding-bottom: 2rem; }
+        
+        .footer { text-align: center; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; }
+        .footer a { color: var(--primary); text-decoration: none; font-weight: 600; }
+        .footer a:hover { text-decoration: underline; }
     </style>
     <script>
         function sortTable(n, tableId) {
-            let table = document.getElementById(tableId), rows, switching = true, i, x, y, shouldSwitch, switchcount = 0;
-            let dir = table.getAttribute("data-dir-" + n) === "asc" ? "desc" : "asc";
-            
+            let table = document.getElementById(tableId), rows, switching = true, i, x, y, shouldSwitch, dir = table.getAttribute("data-dir-" + n) === "asc" ? "desc" : "asc";
             while (switching) {
                 switching = false; rows = table.rows;
                 for (i = 1; i < (rows.length - 1); i++) {
                     shouldSwitch = false;
-                    let valX = rows[i].getElementsByTagName("TD")[n].innerText;
-                    let valY = rows[i+1].getElementsByTagName("TD")[n].innerText;
-                    
-                    let x = parseValue(valX);
-                    let y = parseValue(valY);
-
+                    x = parseVal(rows[i].getElementsByTagName("TD")[n].innerText);
+                    y = parseVal(rows[i+1].getElementsByTagName("TD")[n].innerText);
                     if (dir === "asc") { if (x > y) { shouldSwitch = true; break; } }
                     else { if (x < y) { shouldSwitch = true; break; } }
                 }
-                if (shouldSwitch) {
-                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                    switching = true; switchcount++;
-                }
+                if (shouldSwitch) { rows[i].parentNode.insertBefore(rows[i+1], rows[i]); switching = true; }
             }
             table.setAttribute("data-dir-" + n, dir);
         }
-
-        function parseValue(v) {
+        function parseVal(v) {
             if (v.includes('%')) return parseFloat(v) || 0;
             if (v.includes('/')) { let p = v.split('/'); return parseFloat(p[0])/parseFloat(p[1]) || 0; }
             if (v.includes('-')) return parseFloat(v.split('-')[0]) || 0;
@@ -67,19 +56,18 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏆 LoL Tournament Insights</h1>
+        <h1>🏆 LoL Tournament Stats</h1>
     
         <div class="tournament-section">
             <div class="header-bar">
-                <h2>2026 LCK Cup</h2>
-                <span style="color:var(--text-muted); font-size:0.8rem">点击表头切换排序</span>
+                <h2><a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/" target="_blank">2026 LCK Cup</a></h2>
             </div>
             <table id="table_0">
                 <thead>
                     <tr>
                         <th onclick="sortTable(0, 'table_0')">Team</th>
                         <th onclick="sortTable(1, 'table_0')">BO3 Full</th>
-                        <th onclick="sortTable(2, 'table_0')">BO3% (升序)</th>
+                        <th onclick="sortTable(2, 'table_0')">BO3%</th>
                         <th onclick="sortTable(3, 'table_0')">BO5 Full</th>
                         <th onclick="sortTable(4, 'table_0')">BO5%</th>
                         <th onclick="sortTable(5, 'table_0')">Match W-L</th>
@@ -223,15 +211,14 @@
                 </tr></tbody></table></div>
         <div class="tournament-section">
             <div class="header-bar">
-                <h2>2026 LPL Split 1</h2>
-                <span style="color:var(--text-muted); font-size:0.8rem">点击表头切换排序</span>
+                <h2><a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/" target="_blank">2026 LPL Split 1</a></h2>
             </div>
             <table id="table_1">
                 <thead>
                     <tr>
                         <th onclick="sortTable(0, 'table_1')">Team</th>
                         <th onclick="sortTable(1, 'table_1')">BO3 Full</th>
-                        <th onclick="sortTable(2, 'table_1')">BO3% (升序)</th>
+                        <th onclick="sortTable(2, 'table_1')">BO3%</th>
                         <th onclick="sortTable(3, 'table_1')">BO5 Full</th>
                         <th onclick="sortTable(4, 'table_1')">BO5%</th>
                         <th onclick="sortTable(5, 'table_1')">Match W-L</th>
@@ -426,7 +413,8 @@
                     <td style="color:hsl(215, 60%, 47%); font-weight:700">2026-01-25</td>
                 </tr></tbody></table></div>
         <div class="footer">
-            最后更新: 2026-01-27 23:41:30 CST | 默认以 BO3 打满率升序排列
+            最后更新: 2026-01-27 23:45:16 CST | 
+            <a href="https://github.com/closur3/lol" target="_blank">GitHub Repository</a>
         </div>
     </div>
 </body>
