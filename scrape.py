@@ -19,25 +19,21 @@ TOURNAMENTS = [
 ]
 # =============================================
 
-OUTPUT_DIR = Path("tournaments")
 INDEX_FILE = Path("index.html")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 颜色工具函数 ----------
+# ---------- 颜色与逻辑函数 ----------
 
-def get_hsl(h, s=70, l=45):
-    return f"hsl({int(h)}, {s}%, {l}%)"
+def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
 
 def color_by_ratio(r, reverse=False):
     if r is None: return "#f3f4f6"
-    r = max(0, min(1, r))
-    h = (1 - r) * 140 if reverse else r * 140
+    h = (1 - max(0, min(1, r))) * 140 if reverse else max(0, min(1, r)) * 140
     return get_hsl(h, s=65, l=48)
 
 def color_text_by_ratio(r, reverse=False):
     if r is None: return "#6b7280"
-    r = max(0, min(1, r))
-    h = (1 - r) * 140 if reverse else r * 140
+    h = (1 - max(0, min(1, r))) * 140 if reverse else max(0, min(1, r)) * 140
     return get_hsl(h, s=80, l=35)
 
 def color_by_date(match_date, all_dates):
@@ -47,12 +43,8 @@ def color_by_date(match_date, all_dates):
     freshness = (match_date - min_d).total_seconds() / (max_d - min_d).total_seconds()
     return f"hsl(215, {int(freshness * 80 + 20)}%, {int(55 - freshness * 15)}%)"
 
-def rate(n, d):
-    return n / d if d > 0 else None
-
-def pct(r):
-    return f"{r*100:.1f}%" if r is not None else "-"
-
+def rate(n, d): return n / d if d > 0 else None
+def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
 def parse_date(date_str):
     for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"]:
         try: return datetime.strptime(date_str, fmt)
@@ -65,51 +57,40 @@ def scrape_tournament(t):
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         resp = requests.get(t["url"], headers=headers, timeout=15)
-        resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-    except Exception as e:
-        print(f"Error: {e}")
-        return {}
+    except: return {}
 
     stats = defaultdict(lambda: {
-        "bo3_full": 0, "bo3_total": 0,
-        "bo5_full": 0, "bo5_total": 0,
-        "match_win": 0, "match_total": 0,
-        "game_win": 0, "game_total": 0,
-        "streak_w": 0, "streak_l": 0,
-        "streak_done": False,
-        "last_match_date": None,
+        "bo3_full": 0, "bo3_total": 0, "bo5_full": 0, "bo5_total": 0,
+        "match_win": 0, "match_total": 0, "game_win": 0, "game_total": 0,
+        "streak_w": 0, "streak_l": 0, "streak_done": False, "last_match_date": None,
     })
 
-    rows = soup.select("table tr")
-    for row in rows:
+    for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
-        t1, score, t2 = tds[1].get_text(strip=True), tds[2].get_text(strip=True), tds[3].get_text(strip=True)
-        date_str = tds[-1].get_text(strip=True) if len(tds) >= 7 else ""
-        match_date = parse_date(date_str)
+        t1, score, t2 = tds[1].text.strip(), tds[2].text.strip(), tds[3].text.strip()
+        match_date = parse_date(tds[-1].text.strip())
         if "-" not in score: continue
-        try:
-            s1, s2 = map(int, score.split("-"))
+        try: s1, s2 = map(int, score.split("-"))
         except: continue
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
         for t_ in (t1, t2):
-            if match_date:
-                if stats[t_]["last_match_date"] is None or match_date > stats[t_]["last_match_date"]:
-                    stats[t_]["last_match_date"] = match_date
+            if match_date and (not stats[t_]["last_match_date"] or match_date > stats[t_]["last_match_date"]):
+                stats[t_]["last_match_date"] = match_date
             stats[t_]["match_total"] += 1
             stats[t_]["game_total"] += (s1 + s2)
         stats[winner]["match_win"] += 1
         stats[t1]["game_win"] += s1
         stats[t2]["game_win"] += s2
-        max_s, min_s = max(s1, s2), min(s1, s2)
-        if max_s == 2:
+        mx, mn = max(s1, s2), min(s1, s2)
+        if mx == 2:
             for t_ in (t1, t2): stats[t_]["bo3_total"] += 1
-            if min_s == 1:
+            if mn == 1:
                 for t_ in (t1, t2): stats[t_]["bo3_full"] += 1
-        elif max_s == 3:
+        elif mx == 3:
             for t_ in (t1, t2): stats[t_]["bo5_total"] += 1
-            if min_s == 2:
+            if mn == 2:
                 for t_ in (t1, t2): stats[t_]["bo5_full"] += 1
         if not stats[winner]["streak_done"]:
             if stats[winner]["streak_l"] > 0: stats[winner]["streak_done"] = True
@@ -122,96 +103,73 @@ def scrape_tournament(t):
 # ---------- 生成 HTML ----------
 
 def build_index_html(all_data):
-    cst = timezone(timedelta(hours=8))
-    last_update = datetime.now(cst).strftime("%Y-%m-%d %H:%M:%S CST")
+    last_update = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S CST")
     
     html = f"""<!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Stats Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>LoL Tournament Stats</title>
     <style>
-        :root {{ --bg: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --primary: #3b82f6; }}
-        body {{ font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 1rem; }}
+        :root {{ --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --border: #e2e8f0; --blue: #3b82f6; }}
+        body {{ font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }}
         .container {{ max-width: 1400px; margin: 0 auto; }}
-        h1 {{ text-align: center; font-size: 1.8rem; margin: 1.5rem 0; }}
         
-        .table-wrapper {{ 
+        /* 核心修复：移除不必要的绝对定位 */
+        .table-container {{ 
             width: 100%; 
             overflow-x: auto; 
-            overflow-y: hidden;
-            background: var(--card-bg);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            margin-bottom: 2rem;
-            position: relative;
+            background: var(--card); 
+            border: 1px solid var(--border); 
+            border-radius: 8px; 
+            margin-bottom: 2rem; 
         }}
         
         table {{ 
             width: 100%; 
-            min-width: 1100px; /* 略微增加宽度以适配新的长表头 */
-            border-collapse: separate; /* 必须使用 separate 才能让 sticky 边框生效 */
-            border-spacing: 0;
-            font-size: 0.85rem; 
-            table-layout: fixed; /* 固定布局确保列宽可控 */
+            min-width: 1050px; /* 保证手机端可以滑动 */
+            border-collapse: collapse; 
+            font-size: 13px;
         }}
         
+        /* 表头样式：确保可点击 */
         th {{ 
             background: #f1f5f9; 
-            padding: 0.8rem; 
+            padding: 12px 8px; 
             font-weight: 700; 
-            color: #475569; 
             border-bottom: 2px solid var(--border); 
             cursor: pointer; 
-            position: sticky;
-            top: 0;
-            z-index: 20;
+            user-select: none;
+            position: relative;
         }}
-        
-        /* 强制表头点击区域 */
-        th span {{ display: block; width: 100%; }}
+        th:active {{ background: #cbd5e1; }} /* 点击时的视觉反馈 */
 
-        td {{ padding: 0.85rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }}
+        td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid var(--border); }}
         
-        /* 固定 Team 列 */
-        .col-team {{ width: 150px; position: sticky; left: 0; background: #fff; z-index: 30; border-right: 2px solid var(--border); text-align: left; font-weight: 800; }}
-        th.col-team {{ background: #f1f5f9; z-index: 40; }}
+        /* Team列固定 */
+        .sticky-col {{ 
+            position: sticky; 
+            left: 0; 
+            background: white; 
+            z-index: 10; 
+            border-right: 2px solid var(--border); 
+            text-align: left;
+            font-weight: 800;
+        }}
+        th.sticky-col {{ z-index: 20; background: #f1f5f9; }}
 
-        .badge {{ color: white; font-weight: 800; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; }}
+        .badge {{ color: white; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; }}
         .streak-w {{ background: #10b981; }}
         .streak-l {{ background: #f43f5e; }}
         
-        .footer {{ text-align: center; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }}
-        .footer a {{ color: var(--primary); text-decoration: none; font-weight: 600; }}
+        .footer {{ text-align: center; margin: 2rem 0; font-size: 12px; color: #64748b; }}
+        a {{ color: var(--blue); text-decoration: none; }}
     </style>
-    <script>
-        function sortTable(n, tableId) {{
-            let table = document.getElementById(tableId), rows, switching = true, i, x, y, shouldSwitch, dir = table.getAttribute("data-dir-" + n) === "asc" ? "desc" : "asc";
-            while (switching) {{
-                switching = false; rows = table.rows;
-                for (i = 1; i < (rows.length - 1); i++) {{
-                    shouldSwitch = false;
-                    x = parseVal(rows[i].getElementsByTagName("TD")[n].innerText);
-                    y = parseVal(rows[i+1].getElementsByTagName("TD")[n].innerText);
-                    if (dir === "asc") {{ if (x > y) {{ shouldSwitch = true; break; }} }}
-                    else {{ if (x < y) {{ shouldSwitch = true; break; }} }}
-                }}
-                if (shouldSwitch) {{ rows[i].parentNode.insertBefore(rows[i+1], rows[i]); switching = true; }}
-            }}
-            table.setAttribute("data-dir-" + n, dir);
-        }}
-        function parseVal(v) {{
-            if (v.includes('%')) return parseFloat(v) || 0;
-            if (v.includes('/')) {{ let p = v.split('/'); return parseFloat(p[0])/parseFloat(p[1]) || 0; }}
-            if (v.includes('-')) return parseFloat(v.split('-')[0]) || 0;
-            let n = parseFloat(v); return isNaN(n) ? v.toLowerCase() : n;
-        }}
-    </script>
 </head>
 <body>
     <div class="container">
-        <h1>🏆 LoL Tournament Stats</h1>
+        <h1 style="text-align:center; font-size:1.5rem;">🏆 LoL Tournament Dashboard</h1>
     """
 
     for idx, t in enumerate(TOURNAMENTS):
@@ -220,14 +178,14 @@ def build_index_html(all_data):
         all_dates = [s["last_match_date"] for s in stats.values() if s["last_match_date"]]
         
         html += f"""
-        <div class="table-wrapper">
-            <div style="padding: 1.2rem; border-bottom: 1px solid var(--border); background: #fafafa;">
-                <h2 style="margin:0; font-size:1.2rem;"><a href="{t['url']}" target="_blank" style="color:inherit; text-decoration:none;">{t['title']}</a></h2>
+        <div class="table-container">
+            <div style="padding: 12px; border-bottom: 1px solid var(--border); font-weight: bold;">
+                <a href="{t['url']}" target="_blank">{t['title']}</a>
             </div>
             <table id="{table_id}">
                 <thead>
                     <tr>
-                        <th class="col-team" onclick="sortTable(0, '{table_id}')">Team</th>
+                        <th class="sticky-col" onclick="sortTable(0, '{table_id}')">Team</th>
                         <th onclick="sortTable(1, '{table_id}')">BO3</th>
                         <th onclick="sortTable(2, '{table_id}')">BO3%</th>
                         <th onclick="sortTable(3, '{table_id}')">BO5</th>
@@ -250,36 +208,56 @@ def build_index_html(all_data):
         for team, s in sorted_teams:
             b3r, b5r = rate(s["bo3_full"], s["bo3_total"]), rate(s["bo5_full"], s["bo5_total"])
             mwr, gwr = rate(s["match_win"], s["match_total"]), rate(s["game_win"], s["game_total"])
-            streak = "-"
-            if s["streak_w"] > 0: streak = f"<span class='badge streak-w'>{s['streak_w']}W</span>"
-            elif s["streak_l"] > 0: streak = f"<span class='badge streak-l'>{s['streak_l']}L</span>"
-            last_date = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
+            stk = f"<span class='badge streak-w'>{s['streak_w']}W</span>" if s['streak_w']>0 else (f"<span class='badge streak-l'>{s['streak_l']}L</span>" if s['streak_l']>0 else "-")
+            ld = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
 
             html += f"""
                 <tr>
-                    <td class="col-team">{team}</td>
-                    <td style="color:{color_text_by_ratio(b3r, True)}">{s['bo3_full']}/{s['bo3_total']}</td>
-                    <td style="background:{color_by_ratio(b3r, True)}; color:white; font-weight:800">{pct(b3r)}</td>
-                    <td style="color:{color_text_by_ratio(b5r, True)}">{s['bo5_full']}/{s['bo5_total']}</td>
-                    <td style="background:{color_by_ratio(b5r, True)}; color:white; font-weight:800">{pct(b5r)}</td>
+                    <td class="sticky-col">{team}</td>
+                    <td style="color:{color_text_by_ratio(b3r,True)}">{s['bo3_full']}/{s['bo3_total']}</td>
+                    <td style="background:{color_by_ratio(b3r,True)};color:white;font-weight:bold">{pct(b3r)}</td>
+                    <td style="color:{color_text_by_ratio(b5r,True)}">{s['bo5_full']}/{s['bo5_total']}</td>
+                    <td style="background:{color_by_ratio(b5r,True)};color:white;font-weight:bold">{pct(b5r)}</td>
                     <td style="color:{color_text_by_ratio(mwr)}">{s['match_win']}-{s['match_total']-s['match_win']}</td>
-                    <td style="background:{color_by_ratio(mwr)}; color:white; font-weight:800">{pct(mwr)}</td>
+                    <td style="background:{color_by_ratio(mwr)};color:white;font-weight:bold">{pct(mwr)}</td>
                     <td style="color:{color_text_by_ratio(gwr)}">{s['game_win']}-{s['game_total']-s['game_win']}</td>
-                    <td style="background:{color_by_ratio(gwr)}; color:white; font-weight:800">{pct(gwr)}</td>
-                    <td>{streak}</td>
-                    <td style="color:{color_by_date(s['last_match_date'], all_dates)}; font-weight:700">{last_date}</td>
+                    <td style="background:{color_by_ratio(gwr)};color:white;font-weight:bold">{pct(gwr)}</td>
+                    <td>{stk}</td>
+                    <td style="color:{color_by_date(s['last_match_date'], all_dates)};font-weight:bold">{ld}</td>
                 </tr>"""
         html += "</tbody></table></div>"
 
     html += f"""
         <div class="footer">
-            最后更新: {last_update} | <a href="{GITHUB_REPO}" target="_blank">GitHub Repo</a>
+            Updated: {last_update} | <a href="{GITHUB_REPO}" target="_blank">GitHub Repo</a>
         </div>
     </div>
+    <script>
+        function sortTable(n, id) {{
+            const table = document.getElementById(id);
+            const rows = Array.from(table.rows).slice(1);
+            const dir = table.dataset.dir === "asc" ? -1 : 1;
+            
+            rows.sort((a, b) => {{
+                let x = parse(a.cells[n].innerText);
+                let y = parse(b.cells[n].innerText);
+                return x > y ? dir : x < y ? -dir : 0;
+            }});
+            
+            table.dataset.dir = dir === 1 ? "asc" : "desc";
+            rows.forEach(row => table.tBodies[0].appendChild(row));
+        }}
+        function parse(v) {{
+            if (v.includes('%')) return parseFloat(v);
+            if (v.includes('/')) return v.split('/').reduce((a,b)=>a/b);
+            if (v.includes('-')) return parseFloat(v.split('-')[0]);
+            return isNaN(v) ? v : parseFloat(v);
+        }}
+    </script>
 </body>
 </html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
 
 if __name__ == "__main__":
-    data = {t["slug"]: scrape_tournament(t) for t in TOURNAMENTS}
-    build_index_html(data)
+    d = {t["slug"]: scrape_tournament(t) for t in TOURNAMENTS}
+    build_index_html(d)
