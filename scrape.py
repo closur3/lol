@@ -184,7 +184,7 @@ def build(all_data):
             
             let nextDir;
             if (!currentDir) {{
-                nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
+                nextDir = (n === 0) ? 'asc' : 'desc';
             }} else {{
                 nextDir = currentDir === 'desc' ? 'asc' : 'desc';
             }}
