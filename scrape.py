@@ -52,6 +52,37 @@ def color_by_streak(r):
         green = int(204 - intensity * 166)
         return f"rgb({red}, {green}, 21)"  # 黄色到红色
 
+def color_by_date(match_date, all_dates):
+    """根据日期新旧着色 - 最新绿色到最旧红色"""
+    if match_date is None or not all_dates:
+        return "#6b7280"  # 灰色
+    
+    # 找出最新和最旧的日期
+    min_date = min(all_dates)
+    max_date = max(all_dates)
+    
+    # 如果所有日期相同
+    if min_date == max_date:
+        return "#22c55e"  # 绿色
+    
+    # 计算当前日期在范围中的位置 (0=最新, 1=最旧)
+    date_range = (max_date - min_date).total_seconds()
+    date_pos = (max_date - match_date).total_seconds() / date_range if date_range > 0 else 0
+    
+    # 0(最新)绿色 -> 0.5黄色 -> 1(最旧)红色
+    if date_pos <= 0.5:
+        # 0-0.5: 绿色到黄色
+        intensity = date_pos / 0.5
+        red = int(34 + intensity * 216)
+        green = int(197 - intensity * 7)
+        return f"rgb({red}, {green}, 94)"
+    else:
+        # 0.5-1: 黄色到红色
+        intensity = (date_pos - 0.5) / 0.5
+        red = int(250 - intensity * 30)
+        green = int(204 - intensity * 166)
+        return f"rgb({red}, {green}, 21)"
+
 def parse_date(date_str):
     """解析日期字符串，返回datetime对象"""
     try:
@@ -334,6 +365,10 @@ function sortTable(n, tableId) {
     for idx, t in enumerate(TOURNAMENTS):
         stats = all_data[t["slug"]]
         table_id = f"table{idx}"
+        
+        # 收集所有日期用于颜色计算
+        all_dates = [s["last_match_date"] for s in stats.values() if s["last_match_date"] is not None]
+        
         html += f"<h2><a href='{t['url']}' target='_blank' style='color:#374151;text-decoration:none'>{t['title']}</a></h2><table id='{table_id}'>"
         html += "<tr>"
         headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
@@ -358,6 +393,7 @@ function sortTable(n, tableId) {
                 streak_color = color_streak_wl("L")
 
             last_match = s["last_match_date"].strftime("%Y-%m-%d") if s["last_match_date"] else "-"
+            date_color = color_by_date(s["last_match_date"], all_dates)
 
             html += "<tr>"
             html += f"<td>{team}</td>"
@@ -370,7 +406,7 @@ function sortTable(n, tableId) {
             html += f"<td>{s['game_win']}-{s['game_total']-s['game_win']}</td>"
             html += f"<td>{pct(game_wr)}</td>"
             html += f"<td style='background:{streak_color};color:white;font-weight:700;font-size:1.1em'>{streak}</td>"
-            html += f"<td style='color:#6b7280;font-size:0.9em'>{last_match}</td>"
+            html += f"<td style='color:{date_color};font-size:0.95em;font-weight:600'>{last_match}</td>"
             html += "</tr>"
         html += "</table>"
     html += f"""
