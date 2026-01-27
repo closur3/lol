@@ -100,11 +100,21 @@ def build(all_data):
         .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
         .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
         .table-title a {{ color: #2563eb; text-decoration: none; }}
-        table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }}
+        table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }}
         th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }}
         th:hover {{ background: #eff6ff; color: #2563eb; }}
-        td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }}
-        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; }}
+        td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; width: 180px; }}
+        .col-bo3 {{ width: 60px; }}
+        .col-bo3-pct {{ width: 80px; }}
+        .col-bo5 {{ width: 60px; }}
+        .col-bo5-pct {{ width: 80px; }}
+        .col-match {{ width: 70px; }}
+        .col-match-wr {{ width: 90px; }}
+        .col-game {{ width: 70px; }}
+        .col-game-wr {{ width: 90px; }}
+        .col-streak {{ width: 70px; }}
+        .col-last {{ width: 110px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
         .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
     </style>
@@ -124,16 +134,16 @@ def build(all_data):
                 <thead>
                     <tr>
                         <th class="team-col" onclick="doSort(0, '{tid}')">Team</th>
-                        <th onclick="doSort(1, '{tid}')">BO3</th>
-                        <th onclick="doSort(2, '{tid}')">BO3%</th>
-                        <th onclick="doSort(3, '{tid}')">BO5</th>
-                        <th onclick="doSort(4, '{tid}')">BO5%</th>
-                        <th onclick="doSort(5, '{tid}')">Match</th>
-                        <th onclick="doSort(6, '{tid}')">Match WR</th>
-                        <th onclick="doSort(7, '{tid}')">Game</th>
-                        <th onclick="doSort(8, '{tid}')">Game WR</th>
-                        <th onclick="doSort(9, '{tid}')">Streak</th>
-                        <th onclick="doSort(10, '{tid}')">Last Match</th>
+                        <th class="col-bo3" onclick="doSort(1, '{tid}')">BO3</th>
+                        <th class="col-bo3-pct" onclick="doSort(2, '{tid}')">BO3%</th>
+                        <th class="col-bo5" onclick="doSort(3, '{tid}')">BO5</th>
+                        <th class="col-bo5-pct" onclick="doSort(4, '{tid}')">BO5%</th>
+                        <th class="col-match" onclick="doSort(5, '{tid}')">Match</th>
+                        <th class="col-match-wr" onclick="doSort(6, '{tid}')">Match WR</th>
+                        <th class="col-game" onclick="doSort(7, '{tid}')">Game</th>
+                        <th class="col-game-wr" onclick="doSort(8, '{tid}')">Game WR</th>
+                        <th class="col-streak" onclick="doSort(9, '{tid}')">Streak</th>
+                        <th class="col-last" onclick="doSort(10, '{tid}')">Last Match</th>
                     </tr>
                 </thead>
                 <tbody>"""
@@ -160,16 +170,16 @@ def build(all_data):
             html += f"""
                 <tr>
                     <td class="team-col">{team}</td>
-                    <td>{bo3_txt}</td>
-                    <td style="background:{color_by_ratio(b3r,True)};color:{'white' if b3r is not None else '#cbd5e1'};font-weight:bold">{pct(b3r)}</td>
-                    <td style="background:{'#f1f5f9' if s['bo5_t'] == 0 else 'transparent'};color:{'#cbd5e1' if s['bo5_t'] == 0 else 'inherit'}">{bo5_txt}</td>
-                    <td style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
-                    <td>{match_txt}</td>
-                    <td style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
-                    <td>{game_txt}</td>
-                    <td style="background:{color_by_ratio(gwr)};color:{'white' if gwr is not None else '#cbd5e1'};font-weight:bold">{pct(gwr)}</td>
-                    <td>{stk}</td>
-                    <td style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
+                    <td class="col-bo3">{bo3_txt}</td>
+                    <td class="col-bo3-pct" style="background:{color_by_ratio(b3r,True)};color:{'white' if b3r is not None else '#cbd5e1'};font-weight:bold">{pct(b3r)}</td>
+                    <td class="col-bo5" style="background:{'#f1f5f9' if s['bo5_t'] == 0 else 'transparent'};color:{'#cbd5e1' if s['bo5_t'] == 0 else 'inherit'}">{bo5_txt}</td>
+                    <td class="col-bo5-pct" style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
+                    <td class="col-match">{match_txt}</td>
+                    <td class="col-match-wr" style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
+                    <td class="col-game">{game_txt}</td>
+                    <td class="col-game-wr" style="background:{color_by_ratio(gwr)};color:{'white' if gwr is not None else '#cbd5e1'};font-weight:bold">{pct(gwr)}</td>
+                    <td class="col-streak">{stk}</td>
+                    <td class="col-last" style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
                 </tr>"""
         html += "</tbody></table></div>"
 
