@@ -59,7 +59,7 @@ def scrape(t):
                 for t_ in (t1, t2): stats[t_]["bo3_f"] += 1
         elif mx == 3:
             for t_ in (t1, t2): stats[t_]["bo5_t"] += 1
-            if mn == 2:
+            if mn == 2: 
                 for t_ in (t1, t2): stats[t_]["bo5_f"] += 1
         if not stats[win]["sd"]:
             if stats[win]["sl"] > 0: stats[win]["sd"] = True
@@ -77,22 +77,50 @@ def build(all_data):
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Stats</title>
+    <title>LoL Stats Dashboard</title>
     <style>
-        body {{ font-family: sans-serif; background: #f8fafc; margin: 0; padding: 10px; }}
-        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; }}
-        table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: auto; }}
-        th {{ background: #f1f5f9; padding: 12px 5px; font-weight: 700; border-bottom: 2px solid #e2e8f0; cursor: pointer; position: sticky; top: 0; z-index: 5; }}
-        th:hover {{ background: #e2e8f0; }}
-        td {{ padding: 10px 5px; text-align: center; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }}
-        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #e2e8f0; text-align: left; font-weight: 800; padding-left: 10px; }}
-        th.team-col {{ background: #f1f5f9 !important; z-index: 11; }}
-        .badge {{ color: white; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; }}
-        .footer {{ text-align: center; font-size: 12px; color: #64748b; margin: 20px 0; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #1e293b; }}
+        
+        /* 标题样式处理 */
+        .main-header {{ 
+            text-align: center; 
+            padding: 20px 0 30px 0; 
+        }}
+        .main-header h1 {{ 
+            margin: 0; 
+            font-size: 2.2rem; 
+            font-weight: 800; 
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }}
+        @media (max-width: 600px) {{
+            .main-header h1 {{ font-size: 1.6rem; }}
+        }}
+
+        .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
+        .table-title {{ padding: 15px; background: #fff; border-bottom: 1px solid #f1f5f9; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 1.1rem; }}
+        .table-title a {{ color: #2563eb; text-decoration: none; }}
+        
+        table {{ width: 100%; min-width: 1050px; border-collapse: collapse; font-size: 13px; }}
+        th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }}
+        th:hover {{ background: #f1f5f9; color: #2563eb; }}
+        
+        td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }}
+        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 700; padding-left: 15px; color: #0f172a; }}
+        th.team-col {{ background: #f8fafc !important; z-index: 11; }}
+        
+        .badge {{ color: white; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
+        .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; padding-top: 20px; border-top: 1px solid #e2e8f0; }}
+        .footer a {{ color: #3b82f6; text-decoration: none; font-weight: 600; }}
     </style>
 </head>
 <body>
-    <h2 style="text-align:center">🏆 LoL Stats Dashboard</h2>
+    <header class="main-header">
+        <h1>🏆 LoL Tournament Insights</h1>
+    </header>
+
     <div style="max-width:1400px; margin:0 auto">"""
 
     for idx, t in enumerate(TOURNAMENTS):
@@ -101,7 +129,9 @@ def build(all_data):
         dates = [s["ld"] for s in st.values() if s["ld"]]
         html += f"""
         <div class="wrapper">
-            <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee"><a href="{t['url']}">{t['title']}</a></div>
+            <div class="table-title">
+                <a href="{t['url']}" target="_blank">{t['title']}</a>
+            </div>
             <table id="{tid}">
                 <thead>
                     <tr>
@@ -120,6 +150,7 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
+        # 初始排序：BO3打满率升序，胜率降序
         sorted_teams = sorted(st.items(), key=lambda x: (rate(x[1]["bo3_f"], x[1]["bo3_t"]) or 999, -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)))
 
         for team, s in sorted_teams:
@@ -138,38 +169,52 @@ def build(all_data):
                     <td style="color:{color_text_by_ratio(gwr)}">{s['g_w']}-{s['g_t']-s['g_w']}</td>
                     <td style="background:{color_by_ratio(gwr)};color:white;font-weight:bold">{pct(gwr)}</td>
                     <td>{stk}</td>
-                    <td style="color:{color_by_date(s['ld'], dates)};font-weight:bold">{ld}</td>
+                    <td style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
                 </tr>"""
         html += "</tbody></table></div>"
 
     html += f"""
-    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}">GitHub</a></div>
+    <div class="footer">
+        Generated at {now} | <a href="{GITHUB_REPO}" target="_blank">View on GitHub</a>
+    </div>
     </div>
     <script>
-        function doSort(n, id) {{
-            const t = document.getElementById(id);
-            const b = t.tBodies[0];
-            const rows = Array.from(b.rows);
-            const dir = t.getAttribute('data-dir') === 'asc' ? -1 : 1;
+        function doSort(colIdx, tableId) {{
+            const table = document.getElementById(tableId);
+            const tbody = table.tBodies[0];
+            const rows = Array.from(tbody.rows);
+            const isAsc = table.getAttribute('data-dir') === 'asc';
             
             rows.sort((a, b) => {{
-                let x = parse(a.cells[n].innerText);
-                let y = parse(b.cells[n].innerText);
-                if (n === 10) {{ // 专门针对日期的排序
-                    x = a.cells[n].innerText === "-" ? 0 : new Date(a.cells[n].innerText).getTime();
-                    y = b.cells[n].innerText === "-" ? 0 : new Date(b.cells[n].innerText).getTime();
+                let valA = a.cells[colIdx].innerText;
+                let valB = b.cells[colIdx].innerText;
+                
+                // 日期特殊处理 (Last Match 列)
+                if (colIdx === 10) {{
+                    valA = valA === "-" ? 0 : new Date(valA).getTime();
+                    valB = valB === "-" ? 0 : new Date(valB).getTime();
+                }} else {{
+                    valA = parseVal(valA);
+                    valB = parseVal(valB);
                 }}
-                return x > y ? dir : x < y ? -dir : 0;
+                
+                if (valA === valB) return 0;
+                return isAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
             }});
             
-            t.setAttribute('data-dir', dir === 1 ? 'asc' : 'desc');
-            rows.forEach(r => b.appendChild(r));
+            table.setAttribute('data-dir', isAsc ? 'desc' : 'asc');
+            rows.forEach(r => tbody.appendChild(r));
         }}
-        function parse(v) {{
+        
+        function parseVal(v) {{
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) return eval(v) || 0;
-            if (v.includes('-') && v.length < 6) return parseFloat(v.split('-')[0]);
-            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
+            if (v.includes('/')) {{
+                const parts = v.split('/');
+                return parseFloat(parts[0]) / parseFloat(parts[1]) || 0;
+            }}
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
+            const n = parseFloat(v);
+            return isNaN(n) ? v.toLowerCase() : n;
         }}
     </script>
 </body>
