@@ -50,12 +50,8 @@ def scrape(t):
     try:
         r = requests.get(t["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
-    except: return {}, []
-    
+    except: return {}
     stats = defaultdict(lambda: {"bo3_f": 0, "bo3_t": 0, "bo5_f": 0, "bo5_t": 0, "m_w": 0, "m_t": 0, "g_w": 0, "g_t": 0, "sw": 0, "sl": 0, "sd": False, "ld": None})
-    upcoming = []  # 存储未来的比赛
-    now = datetime.now()
-    
     for row in soup.select("table tr"):
         tds = row.find_all("td")
         if len(tds) < 5: continue
@@ -63,21 +59,9 @@ def scrape(t):
         sc = tds[2].text.strip()
         try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
         except: dt = None
-        
-        # 检查是否是未来的比赛（没有比分）
-        if sc == "-" and dt and dt >= now.replace(hour=0, minute=0, second=0, microsecond=0):
-            upcoming.append({
-                "team1": t1,
-                "team2": t2,
-                "date": dt,
-                "tournament": t["title"]
-            })
-            continue
-            
         if "-" not in sc: continue
         try: s1, s2 = map(int, sc.split("-"))
         except: continue
-        
         win, los = (t1, t2) if s1 > s2 else (t2, t1)
         for t_ in (t1, t2):
             if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
@@ -98,73 +82,11 @@ def scrape(t):
         if not stats[los]["sd"]:
             if stats[los]["sw"] > 0: stats[los]["sd"] = True
             else: stats[los]["sl"] += 1
-    return stats, upcoming
-
-# ---------- 生成赛程预告 HTML ----------
-def build_schedule_section(all_upcoming):
-    if not all_upcoming:
-        return ""
-    
-    # 按日期排序
-    all_upcoming.sort(key=lambda x: x["date"])
-    
-    # 获取接下来7天的比赛
-    now = datetime.now()
-    week_later = now + timedelta(days=7)
-    upcoming_week = [m for m in all_upcoming if m["date"] <= week_later]
-    
-    if not upcoming_week:
-        return ""
-    
-    html = """
-    <div class="schedule-section">
-        <div class="schedule-header">
-            <h2>📅 Upcoming Matches (Next 7 Days)</h2>
-        </div>
-        <div class="matches-grid">"""
-    
-    for match in upcoming_week[:10]:  # 最多显示10场比赛
-        date_str = match["date"].strftime("%Y-%m-%d")
-        day_str = match["date"].strftime("%A")
-        days_until = (match["date"] - now.replace(hour=0, minute=0, second=0, microsecond=0)).days
-        
-        if days_until == 0:
-            time_label = "Today"
-            time_class = "today"
-        elif days_until == 1:
-            time_label = "Tomorrow"
-            time_class = "tomorrow"
-        else:
-            time_label = f"In {days_until} days"
-            time_class = "later"
-        
-        html += f"""
-            <div class="match-card">
-                <div class="match-date">
-                    <span class="date-badge {time_class}">{time_label}</span>
-                    <span class="date-text">{date_str} ({day_str})</span>
-                </div>
-                <div class="match-teams">
-                    <span class="team-name">{match['team1']}</span>
-                    <span class="vs">VS</span>
-                    <span class="team-name">{match['team2']}</span>
-                </div>
-                <div class="match-tournament">{match['tournament']}</div>
-            </div>"""
-    
-    html += """
-        </div>
-    </div>"""
-    
-    return html
+    return stats
 
 # ---------- 生成 HTML ----------
-def build(all_data, all_upcoming):
+def build(all_data):
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S CST")
-    
-    # 生成赛程预告部分
-    schedule_html = build_schedule_section(all_upcoming)
-    
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -175,25 +97,6 @@ def build(all_data, all_upcoming):
         body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
         .main-header {{ text-align: center; padding: 25px 0; }}
         .main-header h1 {{ margin: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        
-        /* 赛程预告样式 */
-        .schedule-section {{ max-width: 1400px; margin: 0 auto 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 25px; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); }}
-        .schedule-header {{ text-align: center; margin-bottom: 20px; }}
-        .schedule-header h2 {{ color: white; font-size: 1.8rem; margin: 0; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }}
-        .matches-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; }}
-        .match-card {{ background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.2s, box-shadow 0.2s; }}
-        .match-card:hover {{ transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
-        .match-date {{ display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }}
-        .date-badge {{ display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; width: fit-content; }}
-        .date-badge.today {{ background: #10b981; color: white; }}
-        .date-badge.tomorrow {{ background: #f59e0b; color: white; }}
-        .date-badge.later {{ background: #6366f1; color: white; }}
-        .date-text {{ color: #64748b; font-size: 13px; font-weight: 500; }}
-        .match-teams {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 12px 0; border-top: 2px solid #f1f5f9; border-bottom: 2px solid #f1f5f9; }}
-        .team-name {{ font-weight: 800; font-size: 16px; color: #1e293b; flex: 1; text-align: center; }}
-        .vs {{ color: #94a3b8; font-weight: 700; font-size: 12px; padding: 0 10px; }}
-        .match-tournament {{ text-align: center; color: #64748b; font-size: 12px; font-weight: 600; }}
-        
         .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
         .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
         .table-title a {{ color: #2563eb; text-decoration: none; }}
@@ -204,16 +107,10 @@ def build(all_data, all_upcoming):
         .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
         .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
-        
-        @media (max-width: 768px) {{
-            .matches-grid {{ grid-template-columns: 1fr; }}
-            .schedule-section {{ padding: 15px; }}
-        }}
     </style>
 </head>
 <body>
     <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
-    {schedule_html}
     <div style="max-width:1400px; margin:0 auto">"""
 
     for idx, t in enumerate(TOURNAMENTS):
@@ -241,6 +138,7 @@ def build(all_data, all_upcoming):
                 </thead>
                 <tbody>"""
         
+        # 排序权重逻辑
         sorted_teams = sorted(st.items(), key=lambda x: (
             rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
             -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
@@ -253,6 +151,7 @@ def build(all_data, all_upcoming):
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
             
+            # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
             bo3_txt = f"{s['bo3_f']}/{s['bo3_t']}" if s['bo3_t'] > 0 else "-"
             bo5_txt = f"{s['bo5_f']}/{s['bo5_t']}" if s['bo5_t'] > 0 else "-"
             match_txt = f"{s['m_w']}-{s['m_t']-s['m_w']}" if s['m_t'] > 0 else "-"
@@ -263,7 +162,7 @@ def build(all_data, all_upcoming):
                     <td class="team-col">{team}</td>
                     <td>{bo3_txt}</td>
                     <td style="background:{color_by_ratio(b3r,True)};color:{'white' if b3r is not None else '#cbd5e1'};font-weight:bold">{pct(b3r)}</td>
-                    <td>{bo5_txt}</td>
+                    <td style="background:{'#f1f5f9' if s['bo5_t'] == 0 else 'transparent'};color:{'#cbd5e1' if s['bo5_t'] == 0 else 'inherit'}">{bo5_txt}</td>
                     <td style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
                     <td>{match_txt}</td>
                     <td style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
@@ -313,6 +212,7 @@ def build(all_data, all_upcoming):
                 return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
             }}
             if (v.includes('-') && v.split('-').length === 2) {{
+                // W-L 格式排序：以胜场为主
                 return parseFloat(v.split('-')[0]);
             }}
             const num = parseFloat(v);
@@ -324,10 +224,5 @@ def build(all_data, all_upcoming):
     INDEX_FILE.write_text(html, encoding="utf-8")
 
 if __name__ == "__main__":
-    all_upcoming = []
-    data = {}
-    for t in TOURNAMENTS:
-        stats, upcoming = scrape(t)
-        data[t["slug"]] = stats
-        all_upcoming.extend(upcoming)
-    build(data, all_upcoming)
+    data = {t["slug"]: scrape(t) for t in TOURNAMENTS}
+    build(data)
