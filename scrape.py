@@ -86,13 +86,13 @@ def scrape_tournament(t):
         if len(tds) < 5:
             continue
 
-        # 提取日期（通常在第一列）
-        date_str = tds[0].get_text(strip=True)
-        match_date = parse_date(date_str)
-
         t1 = tds[1].get_text(strip=True)
         t2 = tds[3].get_text(strip=True)
         score = tds[2].get_text(strip=True)
+        
+        # 提取日期（在最后一列）
+        date_str = tds[-1].get_text(strip=True) if len(tds) >= 7 else ""
+        match_date = parse_date(date_str)
 
         if "-" not in score:
             continue
@@ -157,8 +157,8 @@ def build_md_backup(t, stats):
     md_file = OUTPUT_DIR / f"{t['slug']}.md"
     lines = []
     lines.append(f"# {t['title']}\n")
-    lines.append("| Team | BO3 | FulRT | BO5 | FulRT | Match | WinRT | Game | WinRT | Streak | Date |")
-    lines.append("|------|-----|-------|-----|-------|-------|-------|------|-------|--------|------|")
+    lines.append("| Team | BO3 (Full/Total) | BO3 Rate | BO5 (Full/Total) | BO5 Rate | Match | Match WR | Game | Game WR | Streak | Last Match |")
+    lines.append("|------|------------------|----------|------------------|----------|-------|----------|------|---------|--------|------------|")
 
     for team, s in sorted(stats.items(), key=lambda x: (rate(x[1]["bo3_full"], x[1]["bo3_total"]) or -1)):
         bo3_r = rate(s["bo3_full"], s["bo3_total"])
@@ -299,8 +299,8 @@ function sortTable(n, tableId) {
         table_id = f"table{idx}"
         html += f"<h2>{t['title']}</h2><table id='{table_id}'>"
         html += "<tr>"
-        headers = ["Team","BO3","FulRT","BO5","FulRT",
-                   "Match","WinRT","Game","WinRT","Streak","Date"]
+        headers = ["Team","BO3","BO3 Rate","BO5","BO5 Rate",
+                   "Match","Match WR","Game","Game WR","Streak","Last Match"]
         for i,h in enumerate(headers):
             html += f"<th onclick='sortTable({i}, \"{table_id}\")'>{h}</th>"
         html += "</tr>"
