@@ -104,17 +104,17 @@ def build(all_data):
         th {{ background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }}
         th:hover {{ background: #eff6ff; color: #2563eb; }}
         td {{ padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; width: 180px; }}
-        .col-bo3 {{ width: 60px; }}
-        .col-bo3-pct {{ width: 80px; }}
-        .col-bo5 {{ width: 60px; }}
-        .col-bo5-pct {{ width: 80px; }}
-        .col-match {{ width: 70px; }}
-        .col-match-wr {{ width: 90px; }}
-        .col-game {{ width: 70px; }}
-        .col-game-wr {{ width: 90px; }}
-        .col-streak {{ width: 70px; }}
-        .col-last {{ width: 110px; }}
+        .team-col {{ position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; width: 80px; }}
+        .col-bo3 {{ width: 70px; }}
+        .col-bo3-pct {{ width: 85px; }}
+        .col-bo5 {{ width: 70px; }}
+        .col-bo5-pct {{ width: 85px; }}
+        .col-match {{ width: 80px; }}
+        .col-match-wr {{ width: 100px; }}
+        .col-game {{ width: 80px; }}
+        .col-game-wr {{ width: 100px; }}
+        .col-streak {{ width: 80px; }}
+        .col-last {{ width: 120px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
         .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
     </style>
@@ -207,8 +207,22 @@ def build(all_data):
                 }} else {{ 
                     x = parse(x); y = parse(y); 
                 }}
-                if (x === y) return 0;
-                return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
+                
+                // 主排序
+                if (x !== y) {{
+                    return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
+                }}
+                
+                // 次级排序：当点击Match WR(列6)且数据相同时，按Game WR(列8)排序
+                if (n === 6) {{
+                    let gx = parse(a.cells[8].innerText);
+                    let gy = parse(b.cells[8].innerText);
+                    if (gx !== gy) {{
+                        return nextDir === 'asc' ? (gx > gy ? 1 : -1) : (gx < gy ? 1 : -1);
+                    }}
+                }}
+                
+                return 0;
             }});
             
             t.setAttribute(stateKey, nextDir);
