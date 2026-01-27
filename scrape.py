@@ -21,9 +21,9 @@ TOURNAMENTS = [
 
 OUTPUT_DIR = Path("tournaments")
 INDEX_FILE = Path("index.html")
-GITHUB_REPO = "https://github.com/closur3/lol"  # 你的仓库地址
+GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 现代 HSL 颜色工具函数 ----------
+# ---------- 颜色工具函数 ----------
 
 def get_hsl(h, s=70, l=45):
     return f"hsl({int(h)}, {s}%, {l}%)"
@@ -59,13 +59,17 @@ def parse_date(date_str):
         except: continue
     return None
 
-# ---------- 数据抓取逻辑 ----------
+# ---------- 抓取逻辑 ----------
 
 def scrape_tournament(t):
     headers = {'User-Agent': 'Mozilla/5.0'}
-    resp = requests.get(t["url"], headers=headers, timeout=15)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+    try:
+        resp = requests.get(t["url"], headers=headers, timeout=15)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+    except Exception as e:
+        print(f"Error: {e}")
+        return {}
 
     stats = defaultdict(lambda: {
         "bo3_full": 0, "bo3_total": 0,
@@ -81,29 +85,23 @@ def scrape_tournament(t):
     for row in rows:
         tds = row.find_all("td")
         if len(tds) < 5: continue
-
         t1, score, t2 = tds[1].get_text(strip=True), tds[2].get_text(strip=True), tds[3].get_text(strip=True)
         date_str = tds[-1].get_text(strip=True) if len(tds) >= 7 else ""
         match_date = parse_date(date_str)
-
         if "-" not in score: continue
         try:
             s1, s2 = map(int, score.split("-"))
         except: continue
-
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
-
         for t_ in (t1, t2):
             if match_date:
                 if stats[t_]["last_match_date"] is None or match_date > stats[t_]["last_match_date"]:
                     stats[t_]["last_match_date"] = match_date
             stats[t_]["match_total"] += 1
             stats[t_]["game_total"] += (s1 + s2)
-        
         stats[winner]["match_win"] += 1
         stats[t1]["game_win"] += s1
         stats[t2]["game_win"] += s2
-
         max_s, min_s = max(s1, s2), min(s1, s2)
         if max_s == 2:
             for t_ in (t1, t2): stats[t_]["bo3_total"] += 1
@@ -113,14 +111,12 @@ def scrape_tournament(t):
             for t_ in (t1, t2): stats[t_]["bo5_total"] += 1
             if min_s == 2:
                 for t_ in (t1, t2): stats[t_]["bo5_full"] += 1
-
         if not stats[winner]["streak_done"]:
             if stats[winner]["streak_l"] > 0: stats[winner]["streak_done"] = True
             else: stats[winner]["streak_w"] += 1
         if not stats[loser]["streak_done"]:
             if stats[loser]["streak_w"] > 0: stats[loser]["streak_done"] = True
             else: stats[loser]["streak_l"] += 1
-
     return stats
 
 # ---------- 生成 HTML ----------
@@ -133,33 +129,47 @@ def build_index_html(all_data):
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Tournament Stats Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>LoL Tournament Dashboard</title>
     <style>
         :root {{ --bg: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --primary: #3b82f6; }}
-        body {{ font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 2rem; line-height: 1.5; }}
-        .container {{ max-width: 1440px; margin: 0 auto; }}
-        h1 {{ text-align: center; font-size: 2.25rem; font-weight: 800; margin-bottom: 2rem; color: #0f172a; }}
-        .tournament-section {{ background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 3rem; overflow: hidden; border: 1px solid var(--border); }}
-        .header-bar {{ padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: #fafafa; }}
-        .header-bar h2 {{ margin: 0; font-size: 1.4rem; font-weight: 700; }}
-        .header-bar h2 a {{ color: var(--text-main); text-decoration: none; transition: color 0.2s; }}
-        .header-bar h2 a:hover {{ color: var(--primary); text-decoration: underline; }}
+        body {{ font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text-main); margin: 0; padding: 1rem; line-height: 1.5; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        h1 {{ text-align: center; font-size: 1.8rem; margin: 1.5rem 0; color: #0f172a; }}
         
-        table {{ width: 100%; border-collapse: collapse; font-size: 0.88rem; }}
-        th {{ background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 0.75rem; border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; }}
-        th:hover {{ background: #e2e8f0; }}
-        td {{ padding: 0.9rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }}
-        tr:hover td {{ background-color: #f8fafc; }}
+        /* 移动端滑动核心修复 */
+        .table-wrapper {{ 
+            width: 100%; 
+            overflow-x: auto; /* 开启横向滚动 */
+            -webkit-overflow-scrolling: touch; /* iOS 丝滑滚动 */
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }}
         
-        .team-name {{ text-align: left; font-weight: 800; color: #0f172a; min-width: 140px; }}
-        .badge {{ color: white; font-weight: 800; border-radius: 6px; padding: 4px 10px; font-size: 0.82rem; }}
+        .tournament-section {{ min-width: 100%; }}
+        .header-bar {{ padding: 1.2rem; border-bottom: 1px solid var(--border); sticky: left; }}
+        .header-bar h2 {{ margin: 0; font-size: 1.25rem; }}
+        .header-bar a {{ color: var(--text-main); text-decoration: none; }}
+        
+        table {{ 
+            width: 100%; 
+            min-width: 1000px; /* 关键：强制表格在大屏以下保持宽度，从而触发 wrapper 的滚动 */
+            border-collapse: collapse; 
+            font-size: 0.85rem; 
+        }}
+        
+        th {{ background: #f1f5f9; padding: 0.8rem; text-align: center; font-weight: 700; color: #475569; border-bottom: 2px solid var(--border); cursor: pointer; white-space: nowrap; }}
+        td {{ padding: 0.85rem; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        
+        .team-name {{ text-align: left; font-weight: 800; position: sticky; left: 0; background: inherit; z-index: 10; border-right: 2px solid var(--border); }}
+        .badge {{ color: white; font-weight: 800; border-radius: 4px; padding: 3px 8px; font-size: 0.75rem; }}
         .streak-w {{ background: #10b981; }}
         .streak-l {{ background: #f43f5e; }}
         
-        .footer {{ text-align: center; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; }}
+        .footer {{ text-align: center; margin-top: 3rem; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }}
         .footer a {{ color: var(--primary); text-decoration: none; font-weight: 600; }}
-        .footer a:hover {{ text-decoration: underline; }}
     </style>
     <script>
         function sortTable(n, tableId) {{
@@ -196,7 +206,7 @@ def build_index_html(all_data):
         all_dates = [s["last_match_date"] for s in stats.values() if s["last_match_date"]]
         
         html += f"""
-        <div class="tournament-section">
+        <div class="table-wrapper">
             <div class="header-bar">
                 <h2><a href="{t['url']}" target="_blank">{t['title']}</a></h2>
             </div>
@@ -218,7 +228,6 @@ def build_index_html(all_data):
                 </thead>
                 <tbody>"""
 
-        # 默认排序：BO3% 升序，相同则按 Match WR 降序
         sorted_teams = sorted(stats.items(), key=lambda x: (
             rate(x[1]["bo3_full"], x[1]["bo3_total"]) if x[1]["bo3_total"] > 0 else 999,
             -(rate(x[1]["match_win"], x[1]["match_total"]) or 0)
@@ -251,7 +260,7 @@ def build_index_html(all_data):
     html += f"""
         <div class="footer">
             最后更新: {last_update} | 
-            <a href="{GITHUB_REPO}" target="_blank">GitHub Repository</a>
+            <a href="{GITHUB_REPO}" target="_blank">GitHub Repo</a>
         </div>
     </div>
 </body>
@@ -259,6 +268,6 @@ def build_index_html(all_data):
     INDEX_FILE.write_text(html, encoding="utf-8")
 
 if __name__ == "__main__":
-    all_data = {t["slug"]: scrape_tournament(t) for t in TOURNAMENTS}
-    build_index_html(all_data)
-    print(f"index.html 生成完毕，已包含 GitHub 仓库链接：{GITHUB_REPO}")
+    data = {t["slug"]: scrape_tournament(t) for t in TOURNAMENTS}
+    build_index_html(data)
+    print("Mobile-friendly index.html created!")
