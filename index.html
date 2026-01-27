@@ -3,25 +3,55 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Stats</title>
+    <title>LoL Stats Dashboard</title>
     <style>
-        body { font-family: sans-serif; background: #f8fafc; margin: 0; padding: 10px; }
-        .wrapper { width: 100%; overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; }
-        table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: auto; }
-        th { background: #f1f5f9; padding: 12px 5px; font-weight: 700; border-bottom: 2px solid #e2e8f0; cursor: pointer; position: sticky; top: 0; z-index: 5; }
-        th:hover { background: #e2e8f0; }
-        td { padding: 10px 5px; text-align: center; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-        .team-col { position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #e2e8f0; text-align: left; font-weight: 800; padding-left: 10px; }
-        th.team-col { background: #f1f5f9 !important; z-index: 11; }
-        .badge { color: white; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; }
-        .footer { text-align: center; font-size: 12px; color: #64748b; margin: 20px 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #1e293b; }
+        
+        /* 标题样式处理 */
+        .main-header { 
+            text-align: center; 
+            padding: 20px 0 30px 0; 
+        }
+        .main-header h1 { 
+            margin: 0; 
+            font-size: 2.2rem; 
+            font-weight: 800; 
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        @media (max-width: 600px) {
+            .main-header h1 { font-size: 1.6rem; }
+        }
+
+        .wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 25px; border: 1px solid #e2e8f0; }
+        .table-title { padding: 15px; background: #fff; border-bottom: 1px solid #f1f5f9; border-radius: 12px 12px 0 0; font-weight: 700; font-size: 1.1rem; }
+        .table-title a { color: #2563eb; text-decoration: none; }
+        
+        table { width: 100%; min-width: 1050px; border-collapse: collapse; font-size: 13px; }
+        th { background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        th:hover { background: #f1f5f9; color: #2563eb; }
+        
+        td { padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; }
+        .team-col { position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 700; padding-left: 15px; color: #0f172a; }
+        th.team-col { background: #f8fafc !important; z-index: 11; }
+        
+        .badge { color: white; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 700; }
+        .footer { text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+        .footer a { color: #3b82f6; text-decoration: none; font-weight: 600; }
     </style>
 </head>
 <body>
-    <h2 style="text-align:center">🏆 LoL Stats Dashboard</h2>
+    <header class="main-header">
+        <h1>🏆 LoL Tournament Insights</h1>
+    </header>
+
     <div style="max-width:1400px; margin:0 auto">
         <div class="wrapper">
-            <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee"><a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/">2026 LCK Cup</a></div>
+            <div class="table-title">
+                <a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/" target="_blank">2026 LCK Cup</a>
+            </div>
             <table id="t0">
                 <thead>
                     <tr>
@@ -50,7 +80,7 @@
                     <td style="color:hsl(93, 80%, 35%)">6-3</td>
                     <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td style="color:hsl(215, 60%, 47%);font-weight:bold">2026-01-24</td>
+                    <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
                     <td class="team-col">KT Rolster</td>
@@ -63,7 +93,7 @@
                     <td style="color:hsl(56, 80%, 35%)">4-6</td>
                     <td style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
                     <td><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-25</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
                     <td class="team-col">BNK FearX</td>
@@ -76,7 +106,7 @@
                     <td style="color:hsl(70, 80%, 35%)">5-5</td>
                     <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
                     <td><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-25</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
                     <td class="team-col">Nongshim RedForce</td>
@@ -89,7 +119,7 @@
                     <td style="color:hsl(56, 80%, 35%)">4-6</td>
                     <td style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
                     <td><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td style="color:hsl(215, 20%, 55%);font-weight:bold">2026-01-23</td>
+                    <td style="color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
                     <td class="team-col">T1</td>
@@ -102,7 +132,7 @@
                     <td style="color:hsl(101, 80%, 35%)">8-3</td>
                     <td style="background:hsl(101, 65%, 48%);color:white;font-weight:bold">72.7%</td>
                     <td><span class='badge' style='background:#10b981'>4W</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-25</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
                     <td class="team-col">Hanwha Life Esports</td>
@@ -115,7 +145,7 @@
                     <td style="color:hsl(63, 80%, 35%)">5-6</td>
                     <td style="background:hsl(63, 65%, 48%);color:white;font-weight:bold">45.5%</td>
                     <td><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td style="color:hsl(215, 60%, 47%);font-weight:bold">2026-01-24</td>
+                    <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
                     <td class="team-col">DN SOOPers</td>
@@ -128,7 +158,7 @@
                     <td style="color:hsl(50, 80%, 35%)">4-7</td>
                     <td style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">36.4%</td>
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td style="color:hsl(215, 60%, 47%);font-weight:bold">2026-01-24</td>
+                    <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
                     <td class="team-col">DRX</td>
@@ -141,7 +171,7 @@
                     <td style="color:hsl(50, 80%, 35%)">4-7</td>
                     <td style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">36.4%</td>
                     <td><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td style="color:hsl(215, 20%, 55%);font-weight:bold">2026-01-23</td>
+                    <td style="color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
                     <td class="team-col">HANJIN BRION</td>
@@ -154,7 +184,7 @@
                     <td style="color:hsl(38, 80%, 35%)">3-8</td>
                     <td style="background:hsl(38, 65%, 48%);color:white;font-weight:bold">27.3%</td>
                     <td><span class='badge' style='background:#f43f5e'>4L</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-25</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
                     <td class="team-col">Gen.G</td>
@@ -167,10 +197,12 @@
                     <td style="color:hsl(140, 80%, 35%)">8-0</td>
                     <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
                     <td><span class='badge' style='background:#10b981'>4W</span></td>
-                    <td style="color:hsl(215, 60%, 47%);font-weight:bold">2026-01-24</td>
+                    <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-24</td>
                 </tr></tbody></table></div>
         <div class="wrapper">
-            <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee"><a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/">2026 LPL Split 1</a></div>
+            <div class="table-title">
+                <a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/" target="_blank">2026 LPL Split 1</a>
+            </div>
             <table id="t1">
                 <thead>
                     <tr>
@@ -199,7 +231,7 @@
                     <td style="color:hsl(15, 80%, 35%)">1-8</td>
                     <td style="background:hsl(15, 65%, 48%);color:white;font-weight:bold">11.1%</td>
                     <td><span class='badge' style='background:#f43f5e'>4L</span></td>
-                    <td style="color:hsl(215, 80%, 43%);font-weight:bold">2026-01-26</td>
+                    <td style="color:hsl(215, 80%, 43%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
                     <td class="team-col">LNG Esports</td>
@@ -212,7 +244,7 @@
                     <td style="color:hsl(120, 80%, 35%)">6-1</td>
                     <td style="background:hsl(120, 65%, 48%);color:white;font-weight:bold">85.7%</td>
                     <td><span class='badge' style='background:#10b981'>3W</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
                     <td class="team-col">Oh My God</td>
@@ -225,7 +257,7 @@
                     <td style="color:hsl(40, 80%, 35%)">2-5</td>
                     <td style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
                     <td><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td style="color:hsl(215, 20%, 55%);font-weight:bold">2026-01-23</td>
+                    <td style="color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
                     <td class="team-col">Team WE</td>
@@ -238,7 +270,7 @@
                     <td style="color:hsl(105, 80%, 35%)">9-3</td>
                     <td style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">75.0%</td>
                     <td><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td style="color:hsl(215, 80%, 43%);font-weight:bold">2026-01-26</td>
+                    <td style="color:hsl(215, 80%, 43%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
                     <td class="team-col">JD Gaming</td>
@@ -251,7 +283,7 @@
                     <td style="color:hsl(84, 80%, 35%)">9-6</td>
                     <td style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
                     <td><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td style="color:hsl(215, 80%, 43%);font-weight:bold">2026-01-26</td>
+                    <td style="color:hsl(215, 80%, 43%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
                     <td class="team-col">Bilibili Gaming</td>
@@ -264,7 +296,7 @@
                     <td style="color:hsl(84, 80%, 35%)">9-6</td>
                     <td style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
                     <td><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td style="color:hsl(215, 80%, 43%);font-weight:bold">2026-01-26</td>
+                    <td style="color:hsl(215, 80%, 43%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
                     <td class="team-col">EDward Gaming</td>
@@ -277,7 +309,7 @@
                     <td style="color:hsl(70, 80%, 35%)">5-5</td>
                     <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
                     <td><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td style="color:hsl(215, 20%, 55%);font-weight:bold">2026-01-23</td>
+                    <td style="color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
                     <td class="team-col">Invictus Gaming</td>
@@ -290,7 +322,7 @@
                     <td style="color:hsl(46, 80%, 35%)">6-12</td>
                     <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
                     <td><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
                     <td class="team-col">Top Esports</td>
@@ -303,7 +335,7 @@
                     <td style="color:hsl(54, 80%, 35%)">7-11</td>
                     <td style="background:hsl(54, 65%, 48%);color:white;font-weight:bold">38.9%</td>
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
                     <td class="team-col">Anyone s Legend</td>
@@ -316,7 +348,7 @@
                     <td style="color:hsl(87, 80%, 35%)">10-6</td>
                     <td style="background:hsl(87, 65%, 48%);color:white;font-weight:bold">62.5%</td>
                     <td><span class='badge' style='background:#10b981'>3W</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
                     <td class="team-col">Weibo Gaming</td>
@@ -329,7 +361,7 @@
                     <td style="color:hsl(70, 80%, 35%)">8-8</td>
                     <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
                     <td><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
                     <td class="team-col">LGD Gaming</td>
@@ -342,7 +374,7 @@
                     <td style="color:hsl(70, 80%, 35%)">4-4</td>
                     <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
                     <td><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td style="color:hsl(215, 20%, 55%);font-weight:bold">2026-01-23</td>
+                    <td style="color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
                     <td class="team-col">Ninjas in Pyjamas</td>
@@ -355,7 +387,7 @@
                     <td style="color:hsl(77, 80%, 35%)">5-4</td>
                     <td style="background:hsl(77, 65%, 48%);color:white;font-weight:bold">55.6%</td>
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td style="color:hsl(215, 60%, 47%);font-weight:bold">2026-01-25</td>
+                    <td style="color:hsl(215, 60%, 47%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
                     <td class="team-col">Ultra Prime</td>
@@ -368,35 +400,49 @@
                     <td style="color:hsl(46, 80%, 35%)">2-4</td>
                     <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
                     <td><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td style="color:hsl(215, 100%, 40%);font-weight:bold">2026-01-27</td>
+                    <td style="color:hsl(215, 100%, 40%);font-weight:700">2026-01-27</td>
                 </tr></tbody></table></div>
-    <div class="footer">Updated: 2026-01-28 00:02:25 CST | <a href="https://github.com/closur3/lol">GitHub</a></div>
+    <div class="footer">
+        Generated at 2026-01-28 00:04:45 CST | <a href="https://github.com/closur3/lol" target="_blank">View on GitHub</a>
+    </div>
     </div>
     <script>
-        function doSort(n, id) {
-            const t = document.getElementById(id);
-            const b = t.tBodies[0];
-            const rows = Array.from(b.rows);
-            const dir = t.getAttribute('data-dir') === 'asc' ? -1 : 1;
+        function doSort(colIdx, tableId) {
+            const table = document.getElementById(tableId);
+            const tbody = table.tBodies[0];
+            const rows = Array.from(tbody.rows);
+            const isAsc = table.getAttribute('data-dir') === 'asc';
             
             rows.sort((a, b) => {
-                let x = parse(a.cells[n].innerText);
-                let y = parse(b.cells[n].innerText);
-                if (n === 10) { // 专门针对日期的排序
-                    x = a.cells[n].innerText === "-" ? 0 : new Date(a.cells[n].innerText).getTime();
-                    y = b.cells[n].innerText === "-" ? 0 : new Date(b.cells[n].innerText).getTime();
+                let valA = a.cells[colIdx].innerText;
+                let valB = b.cells[colIdx].innerText;
+                
+                // 日期特殊处理 (Last Match 列)
+                if (colIdx === 10) {
+                    valA = valA === "-" ? 0 : new Date(valA).getTime();
+                    valB = valB === "-" ? 0 : new Date(valB).getTime();
+                } else {
+                    valA = parseVal(valA);
+                    valB = parseVal(valB);
                 }
-                return x > y ? dir : x < y ? -dir : 0;
+                
+                if (valA === valB) return 0;
+                return isAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
             });
             
-            t.setAttribute('data-dir', dir === 1 ? 'asc' : 'desc');
-            rows.forEach(r => b.appendChild(r));
+            table.setAttribute('data-dir', isAsc ? 'desc' : 'asc');
+            rows.forEach(r => tbody.appendChild(r));
         }
-        function parse(v) {
+        
+        function parseVal(v) {
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) return eval(v) || 0;
-            if (v.includes('-') && v.length < 6) return parseFloat(v.split('-')[0]);
-            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
+            if (v.includes('/')) {
+                const parts = v.split('/');
+                return parseFloat(parts[0]) / parseFloat(parts[1]) || 0;
+            }
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
+            const n = parseFloat(v);
+            return isNaN(n) ? v.toLowerCase() : n;
         }
     </script>
 </body>
