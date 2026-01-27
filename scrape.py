@@ -31,7 +31,9 @@ def get_short_name(full_name):
 
 # ---------- 辅助函数 ----------
 def rate(n, d): return n / d if d > 0 else None 
+
 def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
+
 def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
 
 def color_by_ratio(r, rev=False):
@@ -145,9 +147,11 @@ def build(all_data):
         ))
 
         for team, s in sorted_teams:
-            b3r, b5r, mwr = rate(s["bo3_f"], s["bo3_t"]), rate(s["bo5_f"], s["bo5_t"]), rate(s["m_w"], s["m_t"])
-            g_win, g_total = s.get('g_w',0), s.get('g_t',0)
-            gwr = rate(g_win, g_total)
+            b3r = rate(s["bo3_f"], s["bo3_t"])
+            b5r = rate(s["bo5_f"], s["bo5_t"])
+            mwr = rate(s["m_w"], s["m_t"])
+            gwr = rate(s.get("g_w", 0), s.get("g_t", 0))
+
             stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
             ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
             
@@ -160,7 +164,7 @@ def build(all_data):
                     <td style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
                     <td>{s['m_w']}-{s['m_t']-s['m_w']}</td>
                     <td style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
-                    <td>{g_win}-{g_total-g_win}</td>
+                    <td>{s.get('g_w',0)}-{s.get('g_t',0)-s.get('g_w',0)}</td>
                     <td style="background:{color_by_ratio(gwr)};color:{'white' if gwr is not None else '#cbd5e1'};font-weight:bold">{pct(gwr)}</td>
                     <td>{stk}</td>
                     <td style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
@@ -173,18 +177,8 @@ def build(all_data):
     <script>
         function doSort(n, id) {{
             const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
-            const stateKey = 'data-sort-dir-' + n;
-            const currentDir = t.getAttribute(stateKey);
-            
-            let nextDir;
-            if (!currentDir) {{
-                // 默认行为定义：
-                // n=0 (Team), n=1,2 (BO3), n=3,4 (BO5) 默认为升序 (asc)
-                // 其余 (Match, WR, Game, Streak, Date) 默认为降序 (desc)
-                nextDir = (n >= 0 && n <= 4) ? 'asc' : 'desc';
-            }} else {{
-                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
-            }}
+            const currentDir = t.getAttribute('data-sort-dir-' + n) || 'desc';
+            const nextDir = currentDir === 'desc' ? 'asc' : 'desc';
             
             r.sort((a, b) => {{
                 let x = a.cells[n].innerText, y = b.cells[n].innerText;
@@ -198,22 +192,15 @@ def build(all_data):
                 return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
             }});
             
-            t.setAttribute(stateKey, nextDir);
+            t.setAttribute('data-sort-dir-' + n, nextDir);
             r.forEach(row => b.appendChild(row));
         }}
         function parse(v) {{
             if (v === "-") return -1;
             if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) {{ 
-                let p = v.split('/'); 
-                return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
-            }}
-            if (v.includes('-') && v.split('-').length === 2) {{
-                // 处理 W-L 格式，排序时以胜场为主
-                return parseFloat(v.split('-')[0]);
-            }}
-            const num = parseFloat(v);
-            return isNaN(num) ? v.toLowerCase() : num;
+            if (v.includes('/')) {{ let p = v.split('/'); return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); }}
+            if (v.includes('-') && v.split('-').length === 2) return parseFloat(v.split('-')[0]);
+            return isNaN(v) ? v.toLowerCase() : parseFloat(v);
         }}
     </script>
 </body>
