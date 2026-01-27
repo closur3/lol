@@ -6,88 +6,154 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 # ================== 配置 ==================
-TOURNAMENTS = [
-    {"slug": "2026-lck-cup", "title": "2026 LCK Cup", "url": "https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/"},
-    {"slug": "2026-lpl-split-1", "title": "2026 LPL Split 1", "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/"},
-]
-INDEX_FILE = Path("index.html")
-TEAMS_JSON = Path("teams.json")
-GITHUB_REPO = "https://github.com/closur3/lol"
 
-# ---------- 队名映射处理器 ----------
+TOURNAMENTS = [
+{“slug”: “2026-lck-cup”, “title”: “2026 LCK Cup”, “url”: “https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/”},
+{“slug”: “2026-lpl-split-1”, “title”: “2026 LPL Split 1”, “url”: “https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/”},
+]
+INDEX_FILE = Path(“index.html”)
+TEAMS_JSON = Path(“teams.json”)
+GITHUB_REPO = “https://github.com/closur3/lol”
+
+# ================== 列索引常量 ==================
+
+COL_TEAM = 0
+COL_BO3 = 1
+COL_BO3_PCT = 2
+COL_BO5 = 3
+COL_BO5_PCT = 4
+COL_SERIES = 5
+COL_SERIES_WR = 6
+COL_GAME = 7
+COL_GAME_WR = 8
+COL_STREAK = 9
+COL_LAST_DATE = 10
+
+# ––––– 队名映射处理器 –––––
+
 def load_team_map():
-    if TEAMS_JSON.exists():
-        try: return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
-        except: pass
-    return {}
+if TEAMS_JSON.exists():
+try: return json.loads(TEAMS_JSON.read_text(encoding=‘utf-8’))
+except: pass
+return {}
 
 TEAM_MAP = load_team_map()
 
 def get_short_name(full_name):
-    name_upper = full_name.upper()
-    for key, short_val in TEAM_MAP.items():
-        if key.upper() in name_upper: return short_val
-    return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
+name_upper = full_name.upper()
+for key, short_val in TEAM_MAP.items():
+if key.upper() in name_upper: return short_val
+return full_name.replace(“Esports”, “”).replace(“Gaming”, “”).replace(“Academy”, “”).replace(“Team”, “”).strip()
 
-# ---------- 辅助函数 ----------
-def rate(n, d): return n / d if d > 0 else None 
-def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
-def get_hsl(h, s=70, l=45): return f"hsl({int(h)}, {s}%, {l}%)"
+# ––––– 辅助函数 –––––
 
-def color_by_ratio(r, rev=False):
-    if r is None: return "#f1f5f9"
-    h = (1 - max(0, min(1, r))) * 140 if rev else max(0, min(1, r)) * 140
-    return get_hsl(h, s=65, l=48)
+def rate(numerator, denominator):
+return numerator / denominator if denominator > 0 else None
 
-def color_by_date(d, dates):
-    if not d or not dates: return "#9ca3af"
-    mx, mn = max(dates), min(dates)
-    f = (d - mn).total_seconds() / (mx - mn).total_seconds() if mx != mn else 1
-    return f"hsl(215, {int(f * 80 + 20)}%, {int(55 - f * 15)}%)"
+def pct(ratio):
+return f”{ratio*100:.1f}%” if ratio is not None else “-”
 
-# ---------- 抓取逻辑 ----------
-def scrape(t):
-    try:
-        r = requests.get(t["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
-        soup = BeautifulSoup(r.text, "html.parser")
-    except: return {}
-    stats = defaultdict(lambda: {"bo3_f": 0, "bo3_t": 0, "bo5_f": 0, "bo5_t": 0, "m_w": 0, "m_t": 0, "g_w": 0, "g_t": 0, "sw": 0, "sl": 0, "sd": False, "ld": None})
-    for row in soup.select("table tr"):
-        tds = row.find_all("td")
-        if len(tds) < 5: continue
-        t1, t2 = get_short_name(tds[1].text.strip()), get_short_name(tds[3].text.strip())
-        sc = tds[2].text.strip()
-        try: dt = datetime.strptime(tds[-1].text.strip(), "%Y-%m-%d")
-        except: dt = None
-        if "-" not in sc: continue
-        try: s1, s2 = map(int, sc.split("-"))
-        except: continue
-        win, los = (t1, t2) if s1 > s2 else (t2, t1)
-        for t_ in (t1, t2):
-            if dt and (not stats[t_]["ld"] or dt > stats[t_]["ld"]): stats[t_]["ld"] = dt
-            stats[t_]["m_t"] += 1; stats[t_]["g_t"] += (s1+s2)
-        stats[win]["m_w"] += 1; stats[t1]["g_w"] += s1; stats[t2]["g_w"] += s2
-        mx, mn = max(s1, s2), min(s1, s2)
-        if mx == 2:
-            for t_ in (t1, t2): stats[t_]["bo3_t"] += 1
-            if mn == 1: 
-                for t_ in (t1, t2): stats[t_]["bo3_f"] += 1
-        elif mx == 3:
-            for t_ in (t1, t2): stats[t_]["bo5_t"] += 1
-            if mn == 2: 
-                for t_ in (t1, t2): stats[t_]["bo5_f"] += 1
-        if not stats[win]["sd"]:
-            if stats[win]["sl"] > 0: stats[win]["sd"] = True
-            else: stats[win]["sw"] += 1
-        if not stats[los]["sd"]:
-            if stats[los]["sw"] > 0: stats[los]["sd"] = True
-            else: stats[los]["sl"] += 1
-    return stats
+def get_hsl(hue, saturation=70, lightness=45):
+return f”hsl({int(hue)}, {saturation}%, {lightness}%)”
 
-# ---------- 生成 HTML ----------
+def color_by_ratio(ratio, reverse=False):
+if ratio is None: return “#f1f5f9”
+hue = (1 - max(0, min(1, ratio))) * 140 if reverse else max(0, min(1, ratio)) * 140
+return get_hsl(hue, saturation=65, lightness=48)
+
+def color_by_date(date, all_dates):
+if not date or not all_dates: return “#9ca3af”
+max_date, min_date = max(all_dates), min(all_dates)
+factor = (date - min_date).total_seconds() / (max_date - min_date).total_seconds() if max_date != min_date else 1
+return f”hsl(215, {int(factor * 80 + 20)}%, {int(55 - factor * 15)}%)”
+
+# ––––– 抓取逻辑 –––––
+
+def scrape(tournament):
+try:
+response = requests.get(tournament[“url”], headers={‘User-Agent’: ‘Mozilla/5.0’}, timeout=15)
+soup = BeautifulSoup(response.text, “html.parser”)
+except: return {}
+stats = defaultdict(lambda: {
+“bo3_full”: 0, “bo3_total”: 0,
+“bo5_full”: 0, “bo5_total”: 0,
+“series_wins”: 0, “series_total”: 0,
+“game_wins”: 0, “game_total”: 0,
+“streak_wins”: 0, “streak_losses”: 0,
+“streak_dirty”: False, “last_date”: None
+})
+
+```
+for row in soup.select("table tr"):
+    cells = row.find_all("td")
+    if len(cells) < 5: continue
+    
+    team1 = get_short_name(cells[1].text.strip())
+    team2 = get_short_name(cells[3].text.strip())
+    score = cells[2].text.strip()
+    
+    try: 
+        series_date = datetime.strptime(cells[-1].text.strip(), "%Y-%m-%d")
+    except: 
+        series_date = None
+        
+    if "-" not in score: continue
+    
+    try: 
+        score1, score2 = map(int, score.split("-"))
+    except: 
+        continue
+        
+    winner, loser = (team1, team2) if score1 > score2 else (team2, team1)
+    max_score, min_score = max(score1, score2), min(score1, score2)
+    
+    # 更新基础统计
+    for team in (team1, team2):
+        if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]): 
+            stats[team]["last_date"] = series_date
+        stats[team]["series_total"] += 1
+        stats[team]["game_total"] += (score1 + score2)
+        
+    stats[winner]["series_wins"] += 1
+    stats[team1]["game_wins"] += score1
+    stats[team2]["game_wins"] += score2
+    
+    # 判断BO3/BO5
+    if max_score == 2:
+        for team in (team1, team2): 
+            stats[team]["bo3_total"] += 1
+        if min_score == 1: 
+            for team in (team1, team2): 
+                stats[team]["bo3_full"] += 1
+    elif max_score == 3:
+        for team in (team1, team2): 
+            stats[team]["bo5_total"] += 1
+        if min_score == 2: 
+            for team in (team1, team2): 
+                stats[team]["bo5_full"] += 1
+    
+    # 更新连胜/连败
+    if not stats[winner]["streak_dirty"]:
+        if stats[winner]["streak_losses"] > 0: 
+            stats[winner]["streak_dirty"] = True
+        else: 
+            stats[winner]["streak_wins"] += 1
+            
+    if not stats[loser]["streak_dirty"]:
+        if stats[loser]["streak_wins"] > 0: 
+            stats[loser]["streak_dirty"] = True
+        else: 
+            stats[loser]["streak_losses"] += 1
+            
+return stats
+```
+
+# ––––– 生成 HTML –––––
+
 def build(all_data):
-    now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S CST")
-    html = f"""<!DOCTYPE html>
+now = datetime.now(timezone(timedelta(hours=8))).strftime(”%Y-%m-%d %H:%M:%S CST”)
+html = f”””<!DOCTYPE html>
+
 <html>
 <head>
     <meta charset="utf-8">
@@ -109,8 +175,8 @@ def build(all_data):
         .col-bo3-pct {{ width: 85px; }}
         .col-bo5 {{ width: 70px; }}
         .col-bo5-pct {{ width: 85px; }}
-        .col-match {{ width: 80px; }}
-        .col-match-wr {{ width: 100px; }}
+        .col-series {{ width: 80px; }}
+        .col-series-wr {{ width: 100px; }}
         .col-game {{ width: 80px; }}
         .col-game-wr {{ width: 100px; }}
         .col-streak {{ width: 80px; }}
@@ -123,130 +189,156 @@ def build(all_data):
     <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    for idx, t in enumerate(TOURNAMENTS):
-        st = all_data.get(t["slug"], {})
-        tid = f"t{idx}"
-        dates = [s["ld"] for s in st.values() if s["ld"]]
-        html += f"""
-        <div class="wrapper">
-            <div class="table-title"><a href="{t['url']}" target="_blank">{t['title']}</a></div>
-            <table id="{tid}">
-                <thead>
-                    <tr>
-                        <th class="team-col" onclick="doSort(0, '{tid}')">Team</th>
-                        <th class="col-bo3" onclick="doSort(1, '{tid}')">BO3</th>
-                        <th class="col-bo3-pct" onclick="doSort(2, '{tid}')">BO3%</th>
-                        <th class="col-bo5" onclick="doSort(3, '{tid}')">BO5</th>
-                        <th class="col-bo5-pct" onclick="doSort(4, '{tid}')">BO5%</th>
-                        <th class="col-match" onclick="doSort(5, '{tid}')">Match</th>
-                        <th class="col-match-wr" onclick="doSort(6, '{tid}')">Match WR</th>
-                        <th class="col-game" onclick="doSort(7, '{tid}')">Game</th>
-                        <th class="col-game-wr" onclick="doSort(8, '{tid}')">Game WR</th>
-                        <th class="col-streak" onclick="doSort(9, '{tid}')">Streak</th>
-                        <th class="col-last" onclick="doSort(10, '{tid}')">Last Match</th>
-                    </tr>
-                </thead>
-                <tbody>"""
-        
-        # 排序权重逻辑
-        sorted_teams = sorted(st.items(), key=lambda x: (
-            rate(x[1]["bo3_f"], x[1]["bo3_t"]) if rate(x[1]["bo3_f"], x[1]["bo3_t"]) is not None else -1.0,
-            -(rate(x[1]["m_w"], x[1]["m_t"]) or 0)
-        ))
-
-        for team, s in sorted_teams:
-            b3r, b5r, mwr = rate(s["bo3_f"], s["bo3_t"]), rate(s["bo5_f"], s["bo5_t"]), rate(s["m_w"], s["m_t"])
-            g_win, g_total = s.get('g_w',0), s.get('g_t',0)
-            gwr = rate(g_win, g_total)
-            stk = f"<span class='badge' style='background:#10b981'>{s['sw']}W</span>" if s['sw']>0 else (f"<span class='badge' style='background:#f43f5e'>{s['sl']}L</span>" if s['sl']>0 else "-")
-            ld = s["ld"].strftime("%Y-%m-%d") if s["ld"] else "-"
-            
-            # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
-            bo3_txt = f"{s['bo3_f']}/{s['bo3_t']}" if s['bo3_t'] > 0 else "-"
-            bo5_txt = f"{s['bo5_f']}/{s['bo5_t']}" if s['bo5_t'] > 0 else "-"
-            match_txt = f"{s['m_w']}-{s['m_t']-s['m_w']}" if s['m_t'] > 0 else "-"
-            game_txt = f"{g_win}-{g_total-g_win}" if g_total > 0 else "-"
-
-            html += f"""
-                <tr>
-                    <td class="team-col">{team}</td>
-                    <td class="col-bo3">{bo3_txt}</td>
-                    <td class="col-bo3-pct" style="background:{color_by_ratio(b3r,True)};color:{'white' if b3r is not None else '#cbd5e1'};font-weight:bold">{pct(b3r)}</td>
-                    <td class="col-bo5" style="background:{'#f1f5f9' if s['bo5_t'] == 0 else 'transparent'};color:{'#cbd5e1' if s['bo5_t'] == 0 else 'inherit'}">{bo5_txt}</td>
-                    <td class="col-bo5-pct" style="background:{color_by_ratio(b5r,True)};color:{'white' if b5r is not None else '#cbd5e1'};font-weight:bold">{pct(b5r)}</td>
-                    <td class="col-match">{match_txt}</td>
-                    <td class="col-match-wr" style="background:{color_by_ratio(mwr)};color:{'white' if mwr is not None else '#cbd5e1'};font-weight:bold">{pct(mwr)}</td>
-                    <td class="col-game">{game_txt}</td>
-                    <td class="col-game-wr" style="background:{color_by_ratio(gwr)};color:{'white' if gwr is not None else '#cbd5e1'};font-weight:bold">{pct(gwr)}</td>
-                    <td class="col-streak">{stk}</td>
-                    <td class="col-last" style="color:{color_by_date(s['ld'], dates)};font-weight:700">{ld}</td>
-                </tr>"""
-        html += "</tbody></table></div>"
-
+```
+for index, tournament in enumerate(TOURNAMENTS):
+    team_stats = all_data.get(tournament["slug"], {})
+    table_id = f"t{index}"
+    dates = [stat["last_date"] for stat in team_stats.values() if stat["last_date"]]
     html += f"""
-    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
-    </div>
-    <script>
-        function doSort(n, id) {{
-            const t = document.getElementById(id), b = t.tBodies[0], r = Array.from(b.rows);
-            const stateKey = 'data-sort-dir-' + n;
-            const currentDir = t.getAttribute(stateKey);
-            
-            let nextDir;
-            if (!currentDir) {{
-                nextDir = (n === 0) ? 'asc' : 'desc';
-            }} else {{
-                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
-            }}
-            
-            r.sort((a, b) => {{
-                let x = a.cells[n].innerText, y = b.cells[n].innerText;
-                if (n === 10) {{ 
-                    x = x === "-" ? 0 : new Date(x).getTime(); 
-                    y = y === "-" ? 0 : new Date(y).getTime(); 
-                }} else {{ 
-                    x = parse(x); y = parse(y); 
-                }}
-                
-                // 主排序
-                if (x !== y) {{
-                    return nextDir === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
-                }}
-                
-                // 次级排序：当点击Match WR(列6)且数据相同时，按Game WR(列8)排序
-                if (n === 6) {{
-                    let gx = parse(a.cells[8].innerText);
-                    let gy = parse(b.cells[8].innerText);
-                    if (gx !== gy) {{
-                        return nextDir === 'asc' ? (gx > gy ? 1 : -1) : (gx < gy ? 1 : -1);
-                    }}
-                }}
-                
-                return 0;
-            }});
-            
-            t.setAttribute(stateKey, nextDir);
-            r.forEach(row => b.appendChild(row));
+    <div class="wrapper">
+        <div class="table-title"><a href="{tournament['url']}" target="_blank">{tournament['title']}</a></div>
+        <table id="{table_id}">
+            <thead>
+                <tr>
+                    <th class="team-col" rowspan="2" onclick="doSort({COL_TEAM}, '{table_id}')">Team</th>
+                    <th colspan="2" style="text-align:center; border-bottom: 1px solid #f1f5f9;">BO3 Fullrate</th>
+                    <th colspan="2" style="text-align:center; border-bottom: 1px solid #f1f5f9;">BO5 Fullrate</th>
+                    <th colspan="2" style="text-align:center; border-bottom: 1px solid #f1f5f9;">Series</th>
+                    <th colspan="2" style="text-align:center; border-bottom: 1px solid #f1f5f9;">Games</th>
+                    <th class="col-streak" rowspan="2" onclick="doSort({COL_STREAK}, '{table_id}')">Streak</th>
+                    <th class="col-last" rowspan="2" onclick="doSort({COL_LAST_DATE}, '{table_id}')">Last Date</th>
+                </tr>
+                <tr>
+                    <th class="col-bo3" onclick="doSort({COL_BO3}, '{table_id}')">Full</th>
+                    <th class="col-bo3-pct" onclick="doSort({COL_BO3_PCT}, '{table_id}')">%</th>
+                    <th class="col-bo5" onclick="doSort({COL_BO5}, '{table_id}')">Full</th>
+                    <th class="col-bo5-pct" onclick="doSort({COL_BO5_PCT}, '{table_id}')">%</th>
+                    <th class="col-series" onclick="doSort({COL_SERIES}, '{table_id}')">W-L</th>
+                    <th class="col-series-wr" onclick="doSort({COL_SERIES_WR}, '{table_id}')">WR</th>
+                    <th class="col-game" onclick="doSort({COL_GAME}, '{table_id}')">W-L</th>
+                    <th class="col-game-wr" onclick="doSort({COL_GAME_WR}, '{table_id}')">WR</th>
+                </tr>
+            </thead>
+            <tbody>"""
+    
+    # 排序权重逻辑
+    sorted_teams = sorted(team_stats.items(), key=lambda x: (
+        rate(x[1]["bo3_full"], x[1]["bo3_total"]) if rate(x[1]["bo3_full"], x[1]["bo3_total"]) is not None else -1.0,
+        -(rate(x[1]["series_wins"], x[1]["series_total"]) or 0)
+    ))
+
+    for team_name, stat in sorted_teams:
+        bo3_ratio = rate(stat["bo3_full"], stat["bo3_total"])
+        bo5_ratio = rate(stat["bo5_full"], stat["bo5_total"])
+        series_win_ratio = rate(stat["series_wins"], stat["series_total"])
+        game_wins = stat.get('game_wins', 0)
+        game_total = stat.get('game_total', 0)
+        game_win_ratio = rate(game_wins, game_total)
+        
+        streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat['streak_wins'] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat['streak_losses'] > 0 else "-")
+        last_date_display = stat["last_date"].strftime("%Y-%m-%d") if stat["last_date"] else "-"
+        
+        # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
+        bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat['bo3_total'] > 0 else "-"
+        bo5_text = f"{stat['bo5_full']}/{stat['bo5_total']}" if stat['bo5_total'] > 0 else "-"
+        series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat['series_total'] > 0 else "-"
+        game_text = f"{game_wins}-{game_total-game_wins}" if game_total > 0 else "-"
+
+        html += f"""
+            <tr>
+                <td class="team-col">{team_name}</td>
+                <td class="col-bo3" style="background:{'#f1f5f9' if stat['bo3_total'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['bo3_total'] == 0 else 'inherit'}">{bo3_text}</td>
+                <td class="col-bo3-pct" style="background:{color_by_ratio(bo3_ratio, reverse=True)};color:{'white' if bo3_ratio is not None else '#cbd5e1'};font-weight:bold">{pct(bo3_ratio)}</td>
+                <td class="col-bo5" style="background:{'#f1f5f9' if stat['bo5_total'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['bo5_total'] == 0 else 'inherit'}">{bo5_text}</td>
+                <td class="col-bo5-pct" style="background:{color_by_ratio(bo5_ratio, reverse=True)};color:{'white' if bo5_ratio is not None else '#cbd5e1'};font-weight:bold">{pct(bo5_ratio)}</td>
+                <td class="col-series" style="background:{'#f1f5f9' if stat['series_total'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['series_total'] == 0 else 'inherit'}">{series_text}</td>
+                <td class="col-series-wr" style="background:{color_by_ratio(series_win_ratio)};color:{'white' if series_win_ratio is not None else '#cbd5e1'};font-weight:bold">{pct(series_win_ratio)}</td>
+                <td class="col-game" style="background:{'#f1f5f9' if game_total == 0 else 'transparent'};color:{'#cbd5e1' if game_total == 0 else 'inherit'}">{game_text}</td>
+                <td class="col-game-wr" style="background:{color_by_ratio(game_win_ratio)};color:{'white' if game_win_ratio is not None else '#cbd5e1'};font-weight:bold">{pct(game_win_ratio)}</td>
+                <td class="col-streak" style="background:{'#f1f5f9' if stat['streak_wins'] == 0 and stat['streak_losses'] == 0 else 'transparent'};color:{'#cbd5e1' if stat['streak_wins'] == 0 and stat['streak_losses'] == 0 else 'inherit'}">{streak_display}</td>
+                <td class="col-last" style="background:{'#f1f5f9' if not stat['last_date'] else 'transparent'};color:{color_by_date(stat['last_date'], dates) if stat['last_date'] else '#cbd5e1'};font-weight:700">{last_date_display}</td>
+            </tr>"""
+    html += "</tbody></table></div>"
+
+html += f"""
+<div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
+</div>
+<script>
+    // 列索引常量
+    const COL_TEAM = {COL_TEAM};
+    const COL_SERIES_WR = {COL_SERIES_WR};
+    const COL_GAME_WR = {COL_GAME_WR};
+    const COL_LAST_DATE = {COL_LAST_DATE};
+    
+    function doSort(columnIndex, tableId) {{
+        const table = document.getElementById(tableId);
+        const tbody = table.tBodies[0];
+        const rows = Array.from(tbody.rows);
+        const stateKey = 'data-sort-dir-' + columnIndex;
+        const currentDir = table.getAttribute(stateKey);
+        
+        let nextDir;
+        if (!currentDir) {{
+            nextDir = (columnIndex === COL_TEAM) ? 'asc' : 'desc';
+        }} else {{
+            nextDir = currentDir === 'desc' ? 'asc' : 'desc';
         }}
-        function parse(v) {{
-            if (v === "-") return -1;
-            if (v.includes('%')) return parseFloat(v);
-            if (v.includes('/')) {{ 
-                let p = v.split('/'); 
-                return p[1] === '-' ? -1 : parseFloat(p[0])/parseFloat(p[1]); 
+        
+        rows.sort((rowA, rowB) => {{
+            let valueA = rowA.cells[columnIndex].innerText;
+            let valueB = rowB.cells[columnIndex].innerText;
+            
+            // 特殊处理日期列
+            if (columnIndex === COL_LAST_DATE) {{ 
+                valueA = valueA === "-" ? 0 : new Date(valueA).getTime(); 
+                valueB = valueB === "-" ? 0 : new Date(valueB).getTime(); 
+            }} else {{ 
+                valueA = parseValue(valueA);
+                valueB = parseValue(valueB); 
             }}
-            if (v.includes('-') && v.split('-').length === 2) {{
-                // W-L 格式排序：以胜场为主
-                return parseFloat(v.split('-')[0]);
+            
+            // 主排序
+            if (valueA !== valueB) {{
+                return nextDir === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
             }}
-            const num = parseFloat(v);
-            return isNaN(num) ? v.toLowerCase() : num;
+            
+            // 次级排序：当点击Series WR且数据相同时，按Game WR排序
+            if (columnIndex === COL_SERIES_WR) {{
+                let gameWrA = parseValue(rowA.cells[COL_GAME_WR].innerText);
+                let gameWrB = parseValue(rowB.cells[COL_GAME_WR].innerText);
+                if (gameWrA !== gameWrB) {{
+                    return nextDir === 'asc' ? (gameWrA > gameWrB ? 1 : -1) : (gameWrA < gameWrB ? 1 : -1);
+                }}
+            }}
+            
+            return 0;
+        }});
+        
+        table.setAttribute(stateKey, nextDir);
+        rows.forEach(row => tbody.appendChild(row));
+    }}
+    
+    function parseValue(value) {{
+        if (value === "-") return -1;
+        if (value.includes('%')) return parseFloat(value);
+        if (value.includes('/')) {{ 
+            let parts = value.split('/'); 
+            return parts[1] === '-' ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
         }}
-    </script>
+        if (value.includes('-') && value.split('-').length === 2) {{
+            // W-L 格式排序：以胜场为主
+            return parseFloat(value.split('-')[0]);
+        }}
+        const number = parseFloat(value);
+        return isNaN(number) ? value.toLowerCase() : number;
+    }}
+</script>
+```
+
 </body>
 </html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
 
-if __name__ == "__main__":
-    data = {t["slug"]: scrape(t) for t in TOURNAMENTS}
-    build(data)
+if **name** == “**main**”:
+data = {tournament[“slug”]: scrape(tournament) for tournament in TOURNAMENTS}
+build(data)
