@@ -14,7 +14,7 @@ def probe_correct_names():
         # 只要是今年起的比赛，不管打没打完都显示出来
         "where": "DateTime_UTC >= '2026-01-01'",
         "order_by": "DateTime_UTC DESC",
-        "limit": 101
+        "limit": 30
     }
     
     try:
