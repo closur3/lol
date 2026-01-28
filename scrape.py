@@ -147,6 +147,7 @@ def build(all_data):
     html = f"""<!DOCTYPE html>
 <html>
 <head>
+    <link rel="icon" href="/favicon.png" type="image/png">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoL Insights</title>
