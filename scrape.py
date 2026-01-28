@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
+# ================== 配置 ==================
 TOURNAMENTS = [
     {"slug": "2026-lck-cup", "title": "2026 LCK Cup", "url": "https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/"},
     {"slug": "2026-lpl-split-1", "title": "2026 LPL Split 1", "url": "https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/"},
@@ -13,6 +14,7 @@ INDEX_FILE = Path("index.html")
 TEAMS_JSON = Path("teams.json")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
+# ================== 列索引常量 ==================
 COL_TEAM = 0
 COL_BO3 = 1
 COL_BO3_PCT = 2
@@ -25,12 +27,11 @@ COL_GAME_WR = 8
 COL_STREAK = 9
 COL_LAST_DATE = 10
 
+# ---------- 队名映射处理器 ----------
 def load_team_map():
     if TEAMS_JSON.exists():
-        try: 
-            return json.loads(TEAMS_JSON.read_text(encoding="utf-8"))
-        except: 
-            pass
+        try: return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
+        except: pass
     return {}
 
 TEAM_MAP = load_team_map()
@@ -38,10 +39,10 @@ TEAM_MAP = load_team_map()
 def get_short_name(full_name):
     name_upper = full_name.upper()
     for key, short_val in TEAM_MAP.items():
-        if key.upper() in name_upper: 
-            return short_val
+        if key.upper() in name_upper: return short_val
     return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
+# ---------- 辅助函数 ----------
 def rate(numerator, denominator): 
     return numerator / denominator if denominator > 0 else None 
 
@@ -52,25 +53,22 @@ def get_hsl(hue, saturation=70, lightness=45):
     return f"hsl({int(hue)}, {saturation}%, {lightness}%)"
 
 def color_by_ratio(ratio, reverse=False):
-    if ratio is None: 
-        return "#f1f5f9"
+    if ratio is None: return "#f1f5f9"
     hue = (1 - max(0, min(1, ratio))) * 140 if reverse else max(0, min(1, ratio)) * 140
     return get_hsl(hue, saturation=65, lightness=48)
 
 def color_by_date(date, all_dates):
-    if not date or not all_dates: 
-        return "#9ca3af"
+    if not date or not all_dates: return "#9ca3af"
     max_date, min_date = max(all_dates), min(all_dates)
     factor = (date - min_date).total_seconds() / (max_date - min_date).total_seconds() if max_date != min_date else 1
     return f"hsl(215, {int(factor * 80 + 20)}%, {int(55 - factor * 15)}%)"
 
+# ---------- 抓取逻辑 ----------
 def scrape(tournament):
     try:
-        response = requests.get(tournament["url"], headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        response = requests.get(tournament["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
         soup = BeautifulSoup(response.text, "html.parser")
-    except: 
-        return {}
-    
+    except: return {}
     stats = defaultdict(lambda: {
         "bo3_full": 0, "bo3_total": 0, 
         "bo5_full": 0, "bo5_total": 0, 
@@ -82,8 +80,7 @@ def scrape(tournament):
     
     for row in soup.select("table tr"):
         cells = row.find_all("td")
-        if len(cells) < 5: 
-            continue
+        if len(cells) < 5: continue
         
         team1 = get_short_name(cells[1].text.strip())
         team2 = get_short_name(cells[3].text.strip())
@@ -94,8 +91,7 @@ def scrape(tournament):
         except: 
             series_date = None
             
-        if "-" not in score: 
-            continue
+        if "-" not in score: continue
         
         try: 
             score1, score2 = map(int, score.split("-"))
@@ -105,6 +101,7 @@ def scrape(tournament):
         winner, loser = (team1, team2) if score1 > score2 else (team2, team1)
         max_score, min_score = max(score1, score2), min(score1, score2)
         
+        # 更新基础统计
         for team in (team1, team2):
             if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]): 
                 stats[team]["last_date"] = series_date
@@ -115,6 +112,7 @@ def scrape(tournament):
         stats[team1]["game_wins"] += score1
         stats[team2]["game_wins"] += score2
         
+        # 判断BO3/BO5
         if max_score == 2:
             for team in (team1, team2): 
                 stats[team]["bo3_total"] += 1
@@ -128,6 +126,7 @@ def scrape(tournament):
                 for team in (team1, team2): 
                     stats[team]["bo5_full"] += 1
         
+        # 更新连胜/连败
         if not stats[winner]["streak_dirty"]:
             if stats[winner]["streak_losses"] > 0: 
                 stats[winner]["streak_dirty"] = True
@@ -142,6 +141,7 @@ def scrape(tournament):
                 
     return stats
 
+# ---------- 生成 HTML ----------
 def build(all_data):
     now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S CST")
     html = f"""<!DOCTYPE html>
@@ -186,7 +186,7 @@ def build(all_data):
         dates = [stat["last_date"] for stat in team_stats.values() if stat["last_date"]]
         html += f"""
         <div class="wrapper">
-            <div class="table-title"><a href="{tournament["url"]}" target="_blank">{tournament["title"]}</a></div>
+            <div class="table-title"><a href="{tournament['url']}" target="_blank">{tournament['title']}</a></div>
             <table id="{table_id}">
                 <thead>
                     <tr>
@@ -201,6 +201,7 @@ def build(all_data):
                 </thead>
                 <tbody>"""
         
+        # 排序权重逻辑
         sorted_teams = sorted(team_stats.items(), key=lambda x: (
             rate(x[1]["bo3_full"], x[1]["bo3_total"]) if rate(x[1]["bo3_full"], x[1]["bo3_total"]) is not None else -1.0,
             -(rate(x[1]["series_wins"], x[1]["series_total"]) or 0)
@@ -210,16 +211,17 @@ def build(all_data):
             bo3_ratio = rate(stat["bo3_full"], stat["bo3_total"])
             bo5_ratio = rate(stat["bo5_full"], stat["bo5_total"])
             series_win_ratio = rate(stat["series_wins"], stat["series_total"])
-            game_wins = stat.get("game_wins", 0)
-            game_total = stat.get("game_total", 0)
+            game_wins = stat.get('game_wins', 0)
+            game_total = stat.get('game_total', 0)
             game_win_ratio = rate(game_wins, game_total)
             
-            streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat["streak_wins"] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat["streak_losses"] > 0 else "-")
+            streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat['streak_wins'] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat['streak_losses'] > 0 else "-")
             last_date_display = stat["last_date"].strftime("%Y-%m-%d") if stat["last_date"] else "-"
             
-            bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat["bo3_total"] > 0 else "-"
-            bo5_text = f"{stat['bo5_full']}/{stat['bo5_total']}" if stat["bo5_total"] > 0 else "-"
-            series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat["series_total"] > 0 else "-"
+            # --- 优化显示逻辑：没打过的显示 "-" 而不是 "0/0" 或 "0-0" ---
+            bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat['bo3_total'] > 0 else "-"
+            bo5_text = f"{stat['bo5_full']}/{stat['bo5_total']}" if stat['bo5_total'] > 0 else "-"
+            series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat['series_total'] > 0 else "-"
             game_text = f"{game_wins}-{game_total-game_wins}" if game_total > 0 else "-"
 
             html += f"""
@@ -242,6 +244,7 @@ def build(all_data):
     <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
     </div>
     <script>
+        // 列索引常量
         const COL_TEAM = {COL_TEAM};
         const COL_SERIES_WR = {COL_SERIES_WR};
         const COL_GAME_WR = {COL_GAME_WR};
@@ -265,6 +268,7 @@ def build(all_data):
                 let valueA = rowA.cells[columnIndex].innerText;
                 let valueB = rowB.cells[columnIndex].innerText;
                 
+                // 特殊处理日期列
                 if (columnIndex === COL_LAST_DATE) {{ 
                     valueA = valueA === "-" ? 0 : new Date(valueA).getTime(); 
                     valueB = valueB === "-" ? 0 : new Date(valueB).getTime(); 
@@ -273,10 +277,12 @@ def build(all_data):
                     valueB = parseValue(valueB); 
                 }}
                 
+                // 主排序
                 if (valueA !== valueB) {{
                     return nextDir === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
                 }}
                 
+                // 次级排序：当点击Series WR且数据相同时，按Game WR排序
                 if (columnIndex === COL_SERIES_WR) {{
                     let gameWrA = parseValue(rowA.cells[COL_GAME_WR].innerText);
                     let gameWrB = parseValue(rowB.cells[COL_GAME_WR].innerText);
@@ -294,13 +300,14 @@ def build(all_data):
         
         function parseValue(value) {{
             if (value === "-") return -1;
-            if (value.includes("%")) return parseFloat(value);
-            if (value.includes("/")) {{ 
-                let parts = value.split("/"); 
-                return parts[1] === "-" ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
+            if (value.includes('%')) return parseFloat(value);
+            if (value.includes('/')) {{ 
+                let parts = value.split('/'); 
+                return parts[1] === '-' ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
             }}
-            if (value.includes("-") && value.split("-").length === 2) {{
-                return parseFloat(value.split("-")[0]);
+            if (value.includes('-') && value.split('-').length === 2) {{
+                // W-L 格式排序：以胜场为主
+                return parseFloat(value.split('-')[0]);
             }}
             const number = parseFloat(value);
             return isNaN(number) ? value.toLowerCase() : number;
