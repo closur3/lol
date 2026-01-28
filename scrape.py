@@ -4,6 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
+import sys # 引入 sys 用于强制刷新 stdout
 
 # ================== 配置 ==================
 TOURNAMENTS = [
@@ -81,7 +82,16 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 (双轨制 + 详细日志) ----------
+# ---------- 进度条辅助函数 ----------
+def wait_with_countdown(seconds):
+    """显示倒计时，证明程序没死机"""
+    print(f"      ⏳ Safety cooldown: ", end="", flush=True)
+    for i in range(seconds, 0, -1):
+        print(f"{i}..", end="", flush=True)
+        time.sleep(1)
+    print("Go!", flush=True)
+
+# ---------- 抓取逻辑 (双轨制 + 实时日志) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -95,12 +105,12 @@ def scrape(tournament):
 
     api_url = "https://lol.fandom.com/api.php"
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/LogVer (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/LiveLog (https://github.com/closur3/lol)'})
 
     # ==========================================
     # 阶段 1: 抓取 MatchSchedule
     # ==========================================
-    print(f"   [Phase 1] Fetching Match Schedule...")
+    print(f"   [Phase 1] Fetching Match Schedule...", flush=True)
     matches = []
     limit = 500
     offset = 0
@@ -112,37 +122,38 @@ def scrape(tournament):
             "where": f"OverviewPage='{overview_page}'",
             "order_by": "DateTime_UTC ASC", "limit": limit, "offset": offset
         }
+        
+        # 请求前倒计时
+        wait_with_countdown(3) 
+        
         try:
-            # 增加日志提示
-            print(f"      -> Requesting matches (Offset: {offset})... (Waiting 5s safety delay)")
-            time.sleep(5.0) 
-            
+            print(f"      -> Requesting offset {offset}...", end=" ", flush=True)
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"      ⚠️ API RATE LIMIT HIT! Sleeping 60s to cool down... (Please wait)")
-                time.sleep(60)
+                print("FAILED!", flush=True)
+                print(f"      ⚠️ API RATE LIMIT! Sleeping 45s...", flush=True)
+                wait_with_countdown(45)
                 continue
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
-                print(f"      <- Received {len(batch)} matches. (Total: {len(matches)})")
+                print(f"OK! Got {len(batch)} items. (Total: {len(matches)})", flush=True)
                 
                 if len(batch) < limit: 
-                    print("      ✓ Match list download complete.")
                     break
                 offset += limit
             else: 
-                print("      ? No data returned in query.")
+                print("Empty response.", flush=True)
                 break
         except Exception as e:
-            print(f"      ❌ Network Error: {e}")
+            print(f"\n      ❌ Network Error: {e}", flush=True)
             break
 
     # 处理 Match 数据
-    print(f"   ... Processing {len(matches)} matches for timestamps & BO stats...")
+    print(f"   ... Analyzing {len(matches)} matches for BO stats...", flush=True)
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
         t2 = get_short_name(m.get("Team2", ""))
@@ -174,7 +185,7 @@ def scrape(tournament):
     # ==========================================
     # 阶段 2: 抓取 Standings
     # ==========================================
-    print(f"   [Phase 2] Fetching Official Standings...")
+    print(f"   [Phase 2] Fetching Official Standings...", flush=True)
     standings_data = []
     
     while True:
@@ -184,30 +195,33 @@ def scrape(tournament):
             "where": f"OverviewPage='{overview_page}'",
             "limit": 500
         }
+        
+        wait_with_countdown(3)
+        
         try:
-            print(f"      -> Requesting standings table... (Waiting 5s safety delay)")
-            time.sleep(5.0)
-            
+            print(f"      -> Requesting standings...", end=" ", flush=True)
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"      ⚠️ API RATE LIMIT HIT! Sleeping 60s... (Please wait)")
-                time.sleep(60)
+                print("FAILED!", flush=True)
+                print(f"      ⚠️ API RATE LIMIT! Sleeping 45s...", flush=True)
+                wait_with_countdown(45)
                 continue
 
             if "cargoquery" in data:
                 standings_data = [item["title"] for item in data["cargoquery"]]
-                print(f"      <- Received {len(standings_data)} standing records.")
+                print(f"OK! Got {len(standings_data)} records.", flush=True)
                 break 
             else:
+                print("Empty.", flush=True)
                 break
         except Exception as e:
-            print(f"      ❌ Standings Fetch Error: {e}")
+            print(f"\n      ❌ Standings Fetch Error: {e}", flush=True)
             break
 
     # 处理 Standings 数据
-    print(f"   ... Merging official standings data...")
+    print(f"   ... Merging official stats...", flush=True)
     for row in standings_data:
         team_name = get_short_name(row.get("Team", ""))
         if not team_name: continue
@@ -283,7 +297,7 @@ def save_markdown(tournament, team_stats):
     md_content += f"\n---\n\n*Generated by [LoL Stats Scraper]({GITHUB_REPO})*\n"
     md_file = TOURNAMENT_DIR / f"{tournament['slug']}.md"
     md_file.write_text(md_content, encoding='utf-8')
-    print(f"   ✓ Archived Markdown: {md_file}")
+    print(f"   ✓ Archived Markdown: {md_file}", flush=True)
 
 # ---------- 生成 HTML ----------
 def build(all_data):
@@ -463,17 +477,17 @@ def build(all_data):
 </body>
 </html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
-    print(f"✓ Generated: {INDEX_FILE}")
+    print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (Hybrid + Verbose Log)...")
+    print("Starting LoL Stats Scraper (Interactive Log Mode)...", flush=True)
     data = {}
     
     for tournament in TOURNAMENTS:
-        print(f"\nProcessing: {tournament['title']}")
+        print(f"\nProcessing: {tournament['title']}", flush=True)
         team_stats = scrape(tournament)
         data[tournament["slug"]] = team_stats
         save_markdown(tournament, team_stats)
     
     build(data)
-    print("\n✅ All done!")
+    print("\n✅ All done!", flush=True)
