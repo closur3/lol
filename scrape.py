@@ -6,18 +6,17 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # ================== 配置 ==================
+# [修改] 移除了 url 字段，只保留 API 需要的 overview_page
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
         "title": "2026 LCK Cup", 
-        "overview_page": "LCK/2026 Season/Cup", 
-        "url": "https://lol.fandom.com/wiki/LCK/2026_Season/Cup"
+        "overview_page": "LCK/2026 Season/Cup"
     },
     {
         "slug": "2026-lpl-split-1", 
         "title": "2026 LPL Split 1", 
-        "overview_page": "LPL/2026 Season/Split 1", 
-        "url": "https://lol.fandom.com/wiki/LPL/2026_Season/Split_1"
+        "overview_page": "LPL/2026 Season/Split 1"
     },
 ]
 
@@ -83,7 +82,7 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 (API源 + 极度求稳版) ----------
+# ---------- 抓取逻辑 ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -100,8 +99,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    # 伪装 UA
-    session.headers.update({'User-Agent': 'LoLStatsBot/StableVersion (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/FixedStreak (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...")
 
@@ -118,107 +116,113 @@ def scrape(tournament):
         }
 
         try:
-            # --- 核心改动：慢一点好 ---
-            # 每次请求前强制休息 4 秒。这基本上不可能触发 Rate Limit。
             time.sleep(4.0)
-            
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
-            # 如果触发限制，重睡 45 秒
             if "error" in data:
-                print(f"   ⚠️ Rate Limit Hit. Sleeping 45s to cool down...")
+                print(f"   ⚠️ Rate Limit Hit. Sleeping 45s...")
                 time.sleep(45)
-                continue # 重试当前页
+                continue
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
                 print(f"   -> Got {len(batch)} matches...")
-                
-                if len(batch) < limit:
-                    break
+                if len(batch) < limit: break
                 offset += limit
             else:
-                print(f"   Warning: Unexpected response: {data.keys()}")
                 break
-                
         except Exception as e:
             print(f"   Network Error: {e}. Sleeping 10s...")
             time.sleep(10)
             continue
 
-    # --- 数据处理 ---
+    # [核心修复] 必须先预处理并严格排序，确保 Streak 计算正确
+    # 1. 清洗数据并解析时间
+    valid_matches = []
     for m in matches:
-        team1 = get_short_name(m.get("Team1", ""))
-        team2 = get_short_name(m.get("Team2", ""))
-        
-        # 兼容多种日期 Key
+        t1 = get_short_name(m.get("Team1", ""))
+        t2 = get_short_name(m.get("Team2", ""))
         date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
+        raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        raw_s1 = m.get("Team1Score")
-        raw_s2 = m.get("Team2Score")
-
-        if not (team1 and team2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
+        if not (t1 and t2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
             continue
-        
         try:
-            score1, score2 = int(raw_s1), int(raw_s2)
+            s1, s2 = int(raw_s1), int(raw_s2)
         except: continue
         
-        if score1 == 0 and score2 == 0: continue
-
-        # 时间处理 (UTC -> CST)
+        if s1 == 0 and s2 == 0: continue
+        
+        # 解析时间
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
-            series_date = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
+            dt_obj = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
         except:
-            series_date = None
+            dt_obj = datetime.min.replace(tzinfo=timezone.utc)
+            
+        valid_matches.append({
+            "t1": t1, "t2": t2, "s1": s1, "s2": s2,
+            "date": dt_obj, "best_of": m.get("BestOf")
+        })
 
-        winner, loser = (team1, team2) if score1 > score2 else (team2, team1)
-        max_score, min_score = max(score1, score2), min(score1, score2)
+    # 2. 严格按时间正序排列 (Old -> New)
+    valid_matches.sort(key=lambda x: x["date"])
 
-        for team in (team1, team2):
-            if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]): 
-                stats[team]["last_date"] = series_date
+    # 3. 逐场回放计算
+    for m in valid_matches:
+        t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
+        
+        winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
+        max_s, min_s = max(s1, s2), min(s1, s2)
+        
+        # 更新基础数据
+        for team in (t1, t2):
+            if dt > datetime.min.replace(tzinfo=timezone.utc) and (not stats[team]["last_date"] or dt > stats[team]["last_date"]):
+                stats[team]["last_date"] = dt
             stats[team]["series_total"] += 1
-            stats[team]["game_total"] += (score1 + score2)
+            stats[team]["game_total"] += (s1 + s2)
             
         stats[winner]["series_wins"] += 1
-        stats[team1]["game_wins"] += score1
-        stats[team2]["game_wins"] += score2
+        stats[t1]["game_wins"] += s1
+        stats[t2]["game_wins"] += s2
         
-        best_of = m.get("BestOf")
-        if best_of == "3" or (not best_of and max_score == 2):
-            for team in (team1, team2): 
-                stats[team]["bo3_total"] += 1
-            if min_score == 1: 
-                for team in (team1, team2): 
-                    stats[team]["bo3_full"] += 1
-        elif best_of == "5" or (not best_of and max_score == 3):
-            for team in (team1, team2): 
-                stats[team]["bo5_total"] += 1
-            if min_score == 2: 
-                for team in (team1, team2): 
-                    stats[team]["bo5_full"] += 1
+        # BO3/BO5
+        if m["best_of"] == "3" or (not m["best_of"] and max_s == 2):
+            for team in (t1, t2): stats[team]["bo3_total"] += 1
+            if min_s == 1:
+                for team in (t1, t2): stats[team]["bo3_full"] += 1
+        elif m["best_of"] == "5" or (not m["best_of"] and max_s == 3):
+            for team in (t1, t2): stats[team]["bo5_total"] += 1
+            if min_s == 2:
+                for team in (t1, t2): stats[team]["bo5_full"] += 1
         
-        if not stats[winner]["streak_dirty"]:
-            if stats[winner]["streak_losses"] > 0: 
-                stats[winner]["streak_dirty"] = True
-            else: 
-                stats[winner]["streak_wins"] += 1
-                
-        if not stats[loser]["streak_dirty"]:
-            if stats[loser]["streak_wins"] > 0: 
-                stats[loser]["streak_dirty"] = True
-            else: 
-                stats[loser]["streak_losses"] += 1
+        # [核心修复] Streak 逻辑
+        # 既然已经按时间正序，那么：
+        # 赢家：如果之前是连败(L)，现在清零变成1W；如果之前是连胜(W)，+1W
+        # 输家：如果之前是连胜(W)，现在清零变成1L；如果之前是连败(L)，+1L
+        
+        # 赢家处理
+        if stats[winner]["streak_losses"] > 0:
+            stats[winner]["streak_losses"] = 0
+            stats[winner]["streak_wins"] = 1
+        else:
+            stats[winner]["streak_wins"] += 1
+            
+        # 输家处理
+        if stats[loser]["streak_wins"] > 0:
+            stats[loser]["streak_wins"] = 0
+            stats[loser]["streak_losses"] = 1
+        else:
+            stats[loser]["streak_losses"] += 1
                 
     return stats
 
-# ---------- 生成 Markdown 归档 ----------
+# ---------- 生成 Markdown 归档 (表头全大写) ----------
 def save_markdown(tournament, team_stats):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
+    lp_url = f"https://lol.fandom.com/wiki/{tournament['overview_page'].replace(' ', '_')}"
     
     sorted_teams = sorted(team_stats.items(), key=lambda x: (
         rate(x[1]["bo3_full"], x[1]["bo3_total"]) if rate(x[1]["bo3_full"], x[1]["bo3_total"]) is not None else -1.0,
@@ -227,14 +231,14 @@ def save_markdown(tournament, team_stats):
     
     md_content = f"""# {tournament['title']}
 
-**Source:** [{tournament['url']}]({tournament['url']})  
+**Source:** [Leaguepedia]({lp_url})  
 **Updated:** {now}
 
 ---
 
 ## Statistics
 
-| Team | BO3 Full | BO3 Fullrate | BO5 Full | BO5 Fullrate | Series | Series WR | Games | Game WR | Streak | Last Date |
+| TEAM | BO3 FULL | BO3 FULLRATE | BO5 FULL | BO5 FULLRATE | SERIES | SERIES WR | GAMES | GAME WR | STREAK | LAST DATE |
 |------|----------|--------------|----------|--------------|--------|-----------|-------|---------|--------|-----------|
 """
     
@@ -251,8 +255,6 @@ def save_markdown(tournament, team_stats):
         series_text = f"{stat['series_wins']}-{stat['series_total']-stat['series_wins']}" if stat['series_total'] > 0 else "-"
         game_text = f"{game_wins}-{game_total-game_wins}" if game_total > 0 else "-"
         streak_display = f"{stat['streak_wins']}W" if stat['streak_wins'] > 0 else (f"{stat['streak_losses']}L" if stat['streak_losses'] > 0 else "-")
-        
-        # 显示小时分钟
         last_date_display = stat["last_date"].strftime("%Y-%m-%d %H:%M") if stat["last_date"] else "-"
         
         md_content += f"| {team_name} | {bo3_text} | {pct(bo3_ratio)} | {bo5_text} | {pct(bo5_ratio)} | {series_text} | {pct(series_win_ratio)} | {game_text} | {pct(game_win_ratio)} | {streak_display} | {last_date_display} |\n"
@@ -262,7 +264,7 @@ def save_markdown(tournament, team_stats):
     md_file.write_text(md_content, encoding='utf-8')
     print(f"✓ Archived: {md_file}")
 
-# ---------- 生成 HTML ----------
+# ---------- 生成 HTML (表头全大写) ----------
 def build(all_data):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     html = f"""<!DOCTYPE html>
@@ -307,24 +309,26 @@ def build(all_data):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
         dates = [stat["last_date"] for stat in team_stats.values() if stat["last_date"]]
+        
+        lp_url = f"https://lol.fandom.com/wiki/{tournament['overview_page'].replace(' ', '_')}"
         archive_link = f"tournament/{tournament['slug']}.md"
         
         html += f"""
         <div class="wrapper">
             <div class="table-title">
-                <a href="{tournament['url']}" target="_blank">{tournament['title']}</a>
+                <a href="{lp_url}" target="_blank">{tournament['title']}</a>
                 <span class="archive-link">| <a href="{archive_link}" target="_blank">📄 View Archive</a></span>
             </div>
             <table id="{table_id}">
                 <thead>
                     <tr>
-                        <th class="team-col" onclick="doSort({COL_TEAM}, '{table_id}')">Team</th>
-                        <th colspan="2" onclick="doSort({COL_BO3_PCT}, '{table_id}')" style="text-align:center;">BO3 Fullrate</th>
-                        <th colspan="2" onclick="doSort({COL_BO5_PCT}, '{table_id}')" style="text-align:center;">BO5 Fullrate</th>
-                        <th colspan="2" onclick="doSort({COL_SERIES_WR}, '{table_id}')" style="text-align:center;">Series</th>
-                        <th colspan="2" onclick="doSort({COL_GAME_WR}, '{table_id}')" style="text-align:center;">Games</th>
-                        <th class="col-streak" onclick="doSort({COL_STREAK}, '{table_id}')">Streak</th>
-                        <th class="col-last" onclick="doSort({COL_LAST_DATE}, '{table_id}')">Last Date</th>
+                        <th class="team-col" onclick="doSort({COL_TEAM}, '{table_id}')">TEAM</th>
+                        <th colspan="2" onclick="doSort({COL_BO3_PCT}, '{table_id}')" style="text-align:center;">BO3 FULLRATE</th>
+                        <th colspan="2" onclick="doSort({COL_BO5_PCT}, '{table_id}')" style="text-align:center;">BO5 FULLRATE</th>
+                        <th colspan="2" onclick="doSort({COL_SERIES_WR}, '{table_id}')" style="text-align:center;">SERIES</th>
+                        <th colspan="2" onclick="doSort({COL_GAME_WR}, '{table_id}')" style="text-align:center;">GAMES</th>
+                        <th class="col-streak" onclick="doSort({COL_STREAK}, '{table_id}')">STREAK</th>
+                        <th class="col-last" onclick="doSort({COL_LAST_DATE}, '{table_id}')">LAST DATE</th>
                     </tr>
                 </thead>
                 <tbody>"""
@@ -344,7 +348,6 @@ def build(all_data):
             
             streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat['streak_wins'] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat['streak_losses'] > 0 else "-")
             
-            # 显示小时分钟
             last_date_display = stat["last_date"].strftime("%Y-%m-%d %H:%M") if stat["last_date"] else "-"
             
             bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat['bo3_total'] > 0 else "-"
