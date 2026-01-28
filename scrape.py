@@ -4,9 +4,9 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
+import sys
 
 # ================== 配置 ==================
-# [修改] 移除了 url 字段，只保留 API 需要的 overview_page
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
@@ -82,7 +82,17 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 ----------
+# ---------- 进度条辅助函数 ----------
+def wait_with_countdown(seconds):
+    """显示倒计时，证明程序没死机"""
+    print(f"      ⏳ Safety cooldown: ", end="", flush=True)
+    for i in range(seconds, 0, -1):
+        if i < 4 or i % 5 == 0:
+            print(f"{i}..", end="", flush=True)
+        time.sleep(1)
+    print("Go!", flush=True)
+
+# ---------- 抓取逻辑 (单轨制 + N_MatchInPage 严格排序) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -99,61 +109,72 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/StrictOrder (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/SingleTrack (https://github.com/closur3/lol)'})
 
-    print(f"Fetching data for: {overview_page}...")
+    print(f"Fetching data for: {overview_page}...", flush=True)
 
     while True:
         params = {
             "action": "cargoquery",
             "format": "json",
             "tables": "MatchSchedule",
-            # [核心修改] 增加了 N_MatchInPage 字段，这是官方定义的比赛顺序
+            # [关键] 必须请求 N_MatchInPage 以保证排序正确
             "fields": "Team1, Team2, Team1Score, Team2Score, DateTime_UTC, BestOf, N_MatchInPage",
             "where": f"OverviewPage='{overview_page}'",
-            # 按官方顺序排序，而不是单纯的时间
-            "order_by": "DateTime_UTC ASC, N_MatchInPage ASC",
+            "order_by": "DateTime_UTC ASC", 
             "limit": limit,
             "offset": offset
         }
 
+        # 每次请求前等待3秒，不追求极致速度，只求不封号
+        wait_with_countdown(3)
+
         try:
-            time.sleep(4.0) # 保持慢速稳定
+            print(f"      -> Requesting offset {offset}...", end=" ", flush=True)
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"   ⚠️ Rate Limit Hit. Sleeping 45s...")
-                time.sleep(45)
+                print("FAILED!", flush=True)
+                print(f"      ⚠️ API RATE LIMIT! Sleeping 60s...", flush=True)
+                wait_with_countdown(60)
                 continue
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
-                print(f"   -> Got {len(batch)} matches...")
-                if len(batch) < limit: break
+                print(f"OK! Got {len(batch)} items. (Total: {len(matches)})", flush=True)
+                
+                if len(batch) < limit: 
+                    break
                 offset += limit
             else:
+                print("Empty response.", flush=True)
                 break
         except Exception as e:
-            print(f"   Network Error: {e}. Sleeping 10s...")
-            time.sleep(10)
-            continue
+            print(f"\n      ❌ Network Error: {e}", flush=True)
+            time.sleep(5)
+            break
 
-    # 1. 清洗与预处理
+    # ==========================================
+    # 数据清洗与严格排序 (本地计算的核心)
+    # ==========================================
+    print(f"   ... Processing & Sorting {len(matches)} matches...", flush=True)
     valid_matches = []
+    
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
         t2 = get_short_name(m.get("Team2", ""))
         date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
-        raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        # 排序权重：先看 MatchInPage，没有则默认为0
+        # 尝试获取官方序号
         try:
             match_order = float(m.get("N_MatchInPage", 0))
         except:
-            match_order = 0
+            match_order = 0.0
 
+        raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
+        
         if not (t1 and t2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
             continue
         try:
@@ -161,7 +182,8 @@ def scrape(tournament):
         except: continue
         
         if s1 == 0 and s2 == 0: continue
-        
+
+        # 时间处理
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
             dt_obj = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
@@ -171,20 +193,22 @@ def scrape(tournament):
         valid_matches.append({
             "t1": t1, "t2": t2, "s1": s1, "s2": s2,
             "date": dt_obj, "best_of": m.get("BestOf"),
-            "order": match_order
+            "order": match_order # 关键排序字段
         })
 
-    # 2. 严格多重排序 (先按时间，时间相同按官方序号)
-    # 这样能100%保证 Streak 计算顺序正确
+    # [核心] 严格多重排序：先按时间，时间相同按 N_MatchInPage
     valid_matches.sort(key=lambda x: (x["date"], x["order"]))
 
-    # 3. 逐场计算
+    # ==========================================
+    # 统计计算 (严格按顺序回放)
+    # ==========================================
     for m in valid_matches:
         t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
         
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
         max_s, min_s = max(s1, s2), min(s1, s2)
         
+        # 1. 基础数据
         for team in (t1, t2):
             if dt > datetime.min.replace(tzinfo=timezone.utc) and (not stats[team]["last_date"] or dt > stats[team]["last_date"]):
                 stats[team]["last_date"] = dt
@@ -195,6 +219,7 @@ def scrape(tournament):
         stats[t1]["game_wins"] += s1
         stats[t2]["game_wins"] += s2
         
+        # 2. BO3/BO5
         if m["best_of"] == "3" or (not m["best_of"] and max_s == 2):
             for team in (t1, t2): stats[team]["bo3_total"] += 1
             if min_s == 1:
@@ -204,7 +229,7 @@ def scrape(tournament):
             if min_s == 2:
                 for team in (t1, t2): stats[team]["bo5_full"] += 1
         
-        # Streak 逻辑 (基于严格排序，不会错了)
+        # 3. Streak (因为已经严格排序，这里的逻辑是准确的)
         if stats[winner]["streak_losses"] > 0:
             stats[winner]["streak_losses"] = 0
             stats[winner]["streak_wins"] = 1
@@ -262,7 +287,7 @@ def save_markdown(tournament, team_stats):
     md_content += f"\n---\n\n*Generated by [LoL Stats Scraper]({GITHUB_REPO})*\n"
     md_file = TOURNAMENT_DIR / f"{tournament['slug']}.md"
     md_file.write_text(md_content, encoding='utf-8')
-    print(f"✓ Archived: {md_file}")
+    print(f"   ✓ Archived Markdown: {md_file}", flush=True)
 
 # ---------- 生成 HTML (表头全大写) ----------
 def build(all_data):
@@ -442,17 +467,17 @@ def build(all_data):
 </body>
 </html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
-    print(f"✓ Generated: {INDEX_FILE}")
+    print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper with Archive...")
+    print("Starting LoL Stats Scraper (Interactive Log Mode)...", flush=True)
     data = {}
     
     for tournament in TOURNAMENTS:
-        print(f"\nProcessing: {tournament['title']}")
+        print(f"\nProcessing: {tournament['title']}", flush=True)
         team_stats = scrape(tournament)
         data[tournament["slug"]] = team_stats
         save_markdown(tournament, team_stats)
     
     build(data)
-    print("\n✅ All done!")
+    print("\n✅ All done!", flush=True)
