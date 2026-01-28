@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
 
-# ================== 1. 核心配置 (已验证准确) ==================
+# ================== 1. 核心配置 ==================
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
@@ -43,29 +43,28 @@ def color_by_date(d, all_d):
         ts, max_ts, min_ts = d.timestamp(), max(x.timestamp() for x in all_d), min(x.timestamp() for x in all_d)
         if max_ts == min_ts: return "hsl(215, 100%, 40%)"
         f = (ts - min_ts) / (max_ts - min_ts)
+        # 越新越亮蓝 (hue 215)
         return f"hsl(215, {int(f * 80 + 20)}%, {int(55 - f * 15)}%)"
     except: return "#9ca3af"
 
-# ================== 3. 强壮的抓取函数 (带防封 + 调试) ==================
+# ================== 3. 抓取逻辑 (API) ==================
 def fetch_leaguepedia_data(overview_page):
     api_url = "https://lol.fandom.com/api.php"
     matches = []
     limit = 500
     offset = 0
     session = requests.Session()
-    # 必须伪装 UA，否则 Fandom 可能会拒绝连接
-    session.headers.update({'User-Agent': 'LoLStatsBot/DebugMode (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/Final (https://github.com/closur3/lol)'})
     
     print(f"   🚀 Fetching: {overview_page}...")
     
     while True:
-        # 查询参数：移除所有 where 过滤，把所有数据拿回来我们在本地筛选
-        # 这样能避免 API 误杀数据
         params = {
             "action": "cargoquery",
             "format": "json",
             "tables": "MatchSchedule",
-            "fields": "Team1, Team2, Team1Score, Team2Score, Winner, DateTime_UTC, BestOf",
+            # 修正点：使用 'DateTime_UTC=DateTime_UTC' 强制指定返回键名，防止返回 'DateTime UTC'
+            "fields": "Team1, Team2, Team1Score, Team2Score, Winner, DateTime_UTC=DateTime_UTC, BestOf",
             "where": f"OverviewPage='{overview_page}'", 
             "order_by": "DateTime_UTC ASC",
             "limit": limit,
@@ -77,7 +76,7 @@ def fetch_leaguepedia_data(overview_page):
         
         for attempt in range(max_retries):
             try:
-                time.sleep(1.5) # 强制等待，防止 429
+                time.sleep(1.5) 
                 resp = session.get(api_url, params=params, timeout=15)
                 
                 if resp.status_code == 429:
@@ -87,14 +86,14 @@ def fetch_leaguepedia_data(overview_page):
                 
                 data = resp.json()
                 if 'error' in data:
-                    print(f"      ⚠️ API Error: {data['error']}")
+                    print(f"      ⚠️ API Error: {data['error'].get('info', 'Unknown')}")
                     time.sleep(5)
                     continue
                     
                 if "cargoquery" in data:
                     batch = [item["title"] for item in data["cargoquery"]]
                     matches.extend(batch)
-                    print(f"      ✓ Raw Download: {len(batch)} rows (Total: {len(matches)})")
+                    print(f"      ✓ Got {len(batch)} rows (Total: {len(matches)})")
                     if len(batch) < limit:
                         return matches
                     offset += limit
@@ -108,7 +107,7 @@ def fetch_leaguepedia_data(overview_page):
             
     return matches
 
-# ================== 4. 核心处理逻辑 (透视眼模式) ==================
+# ================== 4. 处理逻辑 ==================
 def process_matches(matches):
     stats = defaultdict(lambda: {
         "bo3_full": 0, "bo3_total": 0, "bo5_full": 0, "bo5_total": 0, 
@@ -116,57 +115,42 @@ def process_matches(matches):
         "streak_wins": 0, "streak_losses": 0, "streak_dirty": False, "last_date": None
     })
     
-    print(f"   🔍 Analyzing {len(matches)} raw records...")
+    print(f"   Processing {len(matches)} matches...")
     valid_count = 0
     
-    for i, m in enumerate(matches):
-        t1 = m.get("Team1")
-        t2 = m.get("Team2")
-        raw_s1 = m.get("Team1Score", "")
-        raw_s2 = m.get("Team2Score", "")
-        date_str = m.get("DateTime_UTC")
+    for m in matches:
+        t1, t2 = m.get("Team1"), m.get("Team2")
+        raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        # --- 透视眼：打印前5条数据的真实面貌 ---
-        if i < 5:
-            print(f"      [X-RAY Row {i}] {t1} vs {t2} | ScoreRaw: '{raw_s1}'-'{raw_s2}' | Date: {date_str}")
-
-        # 1. 过滤未安排的比赛
-        if not (t1 and t2):
-            continue
-
-        # 2. 分数清洗 (最关键的一步)
-        # 很多未开赛的数据，Score 是空字符串 "" 或者 None
-        if raw_s1 in [None, ""] or raw_s2 in [None, ""]:
-            # 这是一个未开赛的场次，跳过，但不报错
+        # 1. 鲁棒的日期获取：尝试多种可能的键名
+        date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
+        
+        # 2. 基础过滤
+        if not (t1 and t2) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
             continue
             
         try:
-            s1 = int(raw_s1)
-            s2 = int(raw_s2)
-        except ValueError:
-            # 有时候 Wiki 会填 "FF" (弃权)，这里做个简单的错误捕获
-            print(f"      ⚠️ Invalid Score Format (Row {i}): '{raw_s1}'-'{raw_s2}'")
-            continue
+            s1, s2 = int(raw_s1), int(raw_s2)
+        except: continue
 
-        # 3. 过滤平局/未打 (0-0)
-        # 注意：如果两边都是0，通常意味着比赛还没打，或者数据录入员只录了赛程没录比分
-        if s1 == 0 and s2 == 0:
-            continue
+        if s1 == 0 and s2 == 0: continue
             
-        # --- 数据有效，开始统计 ---
         valid_count += 1
         
-        # 胜负判断
+        # 3. 统计
         if s1 > s2: winner, loser = t1, t2
         elif s2 > s1: winner, loser = t2, t1
-        else: continue # 理论上不存在平局胜者
+        else: continue 
             
         # 时间转换
-        try:
-            dt_cst = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
-        except: dt_cst = None
+        dt_cst = None
+        if date_str:
+            try:
+                # 尝试解析常用的 Cargo 时间格式
+                dt_utc = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                dt_cst = dt_utc.astimezone(CST)
+            except: pass
         
-        # 写入统计
         for t in (t1, t2):
             if dt_cst and (stats[t]["last_date"] is None or dt_cst > stats[t]["last_date"]):
                 stats[t]["last_date"] = dt_cst
@@ -177,7 +161,7 @@ def process_matches(matches):
         stats[t1]["game_wins"] += s1
         stats[t2]["game_wins"] += s2
         
-        # BO3/BO5 推断
+        # BO3/BO5
         best_of = m.get("BestOf")
         max_s, min_s = max(s1, s2), min(s1, s2)
         
@@ -190,7 +174,7 @@ def process_matches(matches):
             if min_s == 2:
                 for t in (t1, t2): stats[t]["bo5_full"] += 1
         
-        # 连胜/连败
+        # Streak
         if stats[winner]["streak_losses"] > 0:
             stats[winner]["streak_losses"] = 0
             stats[winner]["streak_wins"] = 1
@@ -201,10 +185,9 @@ def process_matches(matches):
             stats[loser]["streak_losses"] = 1
         else: stats[loser]["streak_losses"] += 1
 
-    print(f"      ✅ Valid Processed Matches: {valid_count}")
     return stats
 
-# ================== 5. Markdown & HTML 生成 (保持标准格式) ==================
+# ================== 5. 输出生成 ==================
 def save_markdown(tournament, team_stats):
     if not team_stats: return
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
@@ -236,7 +219,7 @@ def save_markdown(tournament, team_stats):
     
     md_content += f"\n---\n\n*Generated by [LoL Stats Scraper]({GITHUB_REPO})*\n"
     (TOURNAMENT_DIR / f"{tournament['slug']}.md").write_text(md_content, encoding='utf-8')
-    print(f"      ✓ Archived Markdown: {tournament['slug']}.md")
+    print(f"      ✓ Archived: {tournament['slug']}.md")
 
 def build(all_data):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
@@ -277,26 +260,23 @@ def build(all_data):
     function pV(v){{if(v==="-")return-1;if(v.includes('%'))return parseFloat(v);if(v.includes('/')){{let p=v.split('/');return p[1]==='-'?-1:parseFloat(p[0])/parseFloat(p[1])}}if(v.includes('-')&&v.split('-').length===2)return parseFloat(v.split('-')[0]);const n=parseFloat(v);return isNaN(n)?v.toLowerCase():n}}
     </script></body></html>"""
     INDEX_FILE.write_text(html, encoding="utf-8")
-    print(f"      ✓ Generated Index: {INDEX_FILE}")
+    print(f"✓ Generated: {INDEX_FILE}")
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (X-RAY DEBUG MODE)...")
+    print("Starting LoL Stats Scraper (Final Production)...")
     data = {}
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}")
         matches = fetch_leaguepedia_data(tournament["overview_page"])
         if matches:
             team_stats = process_matches(matches)
-            if team_stats and len(team_stats) > 0:
+            if team_stats:
                 data[tournament["slug"]] = team_stats
                 save_markdown(tournament, team_stats)
             else:
-                print("   ❌ No valid stats derived. Check [X-RAY] logs above to see why.")
+                print("   No valid matches derived (check logs).")
         else:
-            print("   ❌ No matches found in API.")
+            print("   No matches found (check connection/limit).")
     
-    if data:
-        build(data)
-        print("\n✅ All done! HTML generated.")
-    else:
-        print("\n❌ Failed to generate any tables.")
+    if data: build(data)
+    print("\n✅ All done!")
