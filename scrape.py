@@ -28,7 +28,7 @@ TOURNAMENT_DIR = Path("tournament")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
 TOURNAMENT_DIR.mkdir(exist_ok=True)
-CST = timezone(timedelta(hours=8)) # 北京时间
+CST = timezone(timedelta(hours=8)) 
 
 # 表格列索引
 COL_TEAM = 0
@@ -80,6 +80,7 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
+# [修改] 简单的倒计时，不换行，视觉更紧凑
 def wait_simple(seconds, reason="Cooldown"):
     print(f"      ⏳ {reason} ({seconds}s)...", end="", flush=True)
     time.sleep(seconds)
@@ -102,7 +103,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/UnifiedStyle (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/LogOptimized (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -125,9 +126,11 @@ def scrape(tournament):
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
+            # [关键修改] 遇到错误立即换行打印，不要让用户猜
             if "error" in data:
                 print("FAILED!", flush=True)
-                wait_simple(60, "Rate Limit Hit")
+                print(f"      ⚠️  RATE LIMIT HIT! (API refused connection)", flush=True)
+                wait_simple(60, "Resetting Quota")
                 continue
             
             if "cargoquery" in data:
@@ -300,12 +303,16 @@ def generate_time_table_html(time_data):
             total, full = cell['total'], cell['full']
             
             if total == 0:
-                # [修改] 统一空数据样式
                 html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
             else:
                 ratio = full / total
-                bg_color = color_by_ratio(ratio, reverse=True)
-                html += f"<td style='background:{bg_color}; color:white; font-weight:bold'>{full}/{total}</td>"
+                # [修改] 使用浅色背景 (85% lightness)，黑色文字
+                # 色相: 绿(0%) -> 红(100%)
+                hue = (1 - ratio) * 140 
+                bg_color = f"hsl({int(hue)}, 70%, 85%)"
+                
+                # [修改] 格式：3/6 (50%)
+                html += f"<td style='background:{bg_color}; color:black'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
         html += "</tr>"
         
     html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
@@ -316,8 +323,9 @@ def generate_time_table_html(time_data):
             html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
         else:
             ratio = full / total
-            bg_color = color_by_ratio(ratio, reverse=True)
-            html += f"<td style='background:{bg_color}; color:white'>{full}/{total}</td>"
+            hue = (1 - ratio) * 140 
+            bg_color = f"hsl({int(hue)}, 70%, 85%)"
+            html += f"<td style='background:{bg_color}; color:black'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
     html += "</tr></tbody></table></div>"
     return html
 
