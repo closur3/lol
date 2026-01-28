@@ -81,7 +81,7 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 (双轨制：赛程表 + 积分榜) ----------
+# ---------- 抓取逻辑 (双轨制 + 详细日志) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -95,13 +95,12 @@ def scrape(tournament):
 
     api_url = "https://lol.fandom.com/api.php"
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/StandingsV1 (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/LogVer (https://github.com/closur3/lol)'})
 
     # ==========================================
     # 阶段 1: 抓取 MatchSchedule
-    # 目的: 仅用于计算 BO3/BO5 打满率 和 Last Date
     # ==========================================
-    print(f"1. Fetching Matches for: {overview_page}...")
+    print(f"   [Phase 1] Fetching Match Schedule...")
     matches = []
     limit = 500
     offset = 0
@@ -114,47 +113,53 @@ def scrape(tournament):
             "order_by": "DateTime_UTC ASC", "limit": limit, "offset": offset
         }
         try:
-            time.sleep(5.0) # 慢速请求
+            # 增加日志提示
+            print(f"      -> Requesting matches (Offset: {offset})... (Waiting 5s safety delay)")
+            time.sleep(5.0) 
+            
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"   ⚠️ Rate Limit. Sleeping 60s...")
+                print(f"      ⚠️ API RATE LIMIT HIT! Sleeping 60s to cool down... (Please wait)")
                 time.sleep(60)
                 continue
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
-                if len(batch) < limit: break
+                print(f"      <- Received {len(batch)} matches. (Total: {len(matches)})")
+                
+                if len(batch) < limit: 
+                    print("      ✓ Match list download complete.")
+                    break
                 offset += limit
-            else: break
+            else: 
+                print("      ? No data returned in query.")
+                break
         except Exception as e:
-            print(f"   Network Error: {e}")
+            print(f"      ❌ Network Error: {e}")
             break
 
-    # 处理 Match 数据 (只提取 BO 和 日期)
+    # 处理 Match 数据
+    print(f"   ... Processing {len(matches)} matches for timestamps & BO stats...")
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
         t2 = get_short_name(m.get("Team2", ""))
         date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
         
-        # 尝试解析分数仅为了判断 BO 类型
         try: s1, s2 = int(m.get("Team1Score")), int(m.get("Team2Score"))
         except: continue
-        if s1 == 0 and s2 == 0: continue # 未开赛
+        if s1 == 0 and s2 == 0: continue 
 
-        # 时间处理
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
             series_date = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
         except: series_date = None
 
-        # BO3/BO5 判断逻辑
         max_s, min_s = max(s1, s2), min(s1, s2)
         best_of = m.get("BestOf")
         
-        # 更新 Last Date 和 BO 数据
         for team in (t1, t2):
             if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]):
                 stats[team]["last_date"] = series_date
@@ -167,14 +172,11 @@ def scrape(tournament):
                 if min_s == 2: stats[team]["bo5_full"] += 1
 
     # ==========================================
-    # 阶段 2: 抓取 Standings (积分榜)
-    # 目的: 直接读取官方的 胜负场、小局分、连胜
+    # 阶段 2: 抓取 Standings
     # ==========================================
-    print(f"2. Fetching Standings for: {overview_page}...")
+    print(f"   [Phase 2] Fetching Official Standings...")
     standings_data = []
     
-    # 这里的查询表从 MatchSchedule 变成了 Standings
-    # 字段说明: Win(大场胜), Loss(大场负), GameWin(小局胜), GameLoss(小局负), Streak, StreakDirection
     while True:
         params = {
             "action": "cargoquery", "format": "json", "tables": "Standings",
@@ -183,31 +185,33 @@ def scrape(tournament):
             "limit": 500
         }
         try:
-            time.sleep(5.0) # 再次慢速等待
+            print(f"      -> Requesting standings table... (Waiting 5s safety delay)")
+            time.sleep(5.0)
+            
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"   ⚠️ Rate Limit during Standings. Sleeping 60s...")
+                print(f"      ⚠️ API RATE LIMIT HIT! Sleeping 60s... (Please wait)")
                 time.sleep(60)
                 continue
 
             if "cargoquery" in data:
                 standings_data = [item["title"] for item in data["cargoquery"]]
-                print(f"   -> Got {len(standings_data)} standing records.")
-                break # 积分榜通常只有一页，抓完直接跳出
+                print(f"      <- Received {len(standings_data)} standing records.")
+                break 
             else:
                 break
         except Exception as e:
-            print(f"   Standings Fetch Error: {e}")
+            print(f"      ❌ Standings Fetch Error: {e}")
             break
 
-    # 处理 Standings 数据 (覆盖之前的计算)
+    # 处理 Standings 数据
+    print(f"   ... Merging official standings data...")
     for row in standings_data:
         team_name = get_short_name(row.get("Team", ""))
         if not team_name: continue
         
-        # 1. 覆盖系列赛数据
         try:
             w = int(row.get("Win", 0))
             l = int(row.get("Loss", 0))
@@ -215,7 +219,6 @@ def scrape(tournament):
             stats[team_name]["series_total"] = w + l
         except: pass
 
-        # 2. 覆盖小局数据
         try:
             gw = int(row.get("GameWin", 0))
             gl = int(row.get("GameLoss", 0))
@@ -223,10 +226,9 @@ def scrape(tournament):
             stats[team_name]["game_total"] = gw + gl
         except: pass
 
-        # 3. 覆盖连胜数据 (最稳的来源)
         try:
             s_val = int(row.get("Streak", 0))
-            s_dir = row.get("StreakDirection", "") # 通常是 'Win' 或 'Loss'
+            s_dir = row.get("StreakDirection", "") 
             
             if s_dir == "Win":
                 stats[team_name]["streak_wins"] = s_val
@@ -281,7 +283,7 @@ def save_markdown(tournament, team_stats):
     md_content += f"\n---\n\n*Generated by [LoL Stats Scraper]({GITHUB_REPO})*\n"
     md_file = TOURNAMENT_DIR / f"{tournament['slug']}.md"
     md_file.write_text(md_content, encoding='utf-8')
-    print(f"✓ Archived: {md_file}")
+    print(f"   ✓ Archived Markdown: {md_file}")
 
 # ---------- 生成 HTML ----------
 def build(all_data):
@@ -464,7 +466,7 @@ def build(all_data):
     print(f"✓ Generated: {INDEX_FILE}")
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (Hybrid Mode)...")
+    print("Starting LoL Stats Scraper (Hybrid + Verbose Log)...")
     data = {}
     
     for tournament in TOURNAMENTS:
