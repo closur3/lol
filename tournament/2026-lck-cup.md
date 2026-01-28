@@ -1,7 +1,7 @@
 # 2026 LCK Cup
 
 **Source:** [https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/](https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/)  
-**Updated:** 2026-01-28 22:45:54 CST
+**Updated:** 2026-01-28 23:04:08 CST
 
 ---
 
