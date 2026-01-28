@@ -6,58 +6,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoL Insights</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; margin: 0; padding: 10px; color: #1e293b; }
-        .main-header { text-align: center; padding: 30px 0 20px; }
-        .main-header h1 { margin: 0; font-size: 2.5rem; }
-        .wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px; border: 1px solid #e2e8f0; }
-        .table-title { padding: 16px 20px; font-weight: 700; border-bottom: 1px solid #f1f5f9; display: flex; align-items: baseline; gap: 10px; }
-        .table-title a.title-link { color: #0f172a; text-decoration: none; font-size: 1.1rem; }
-        .table-title a.title-link:hover { color: #2563eb; }
-        .archive-link { font-size: 0.85rem; color: #64748b; }
-        .archive-link a { color: #64748b; text-decoration: none; }
-        .archive-link a:hover { text-decoration: underline; }
-        
-        table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; }
-        th { background: #f8fafc; padding: 12px 10px; font-weight: 600; color: #64748b; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; cursor: pointer; user-select: none; }
-        th:hover { background: #f1f5f9; color: #334155; }
-        td { padding: 10px 10px; text-align: center; border-bottom: 1px solid #f1f5f9; }
-        
-        .team-col { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; text-align: left; font-weight: 700; padding-left: 20px; color: #0f172a; width: 100px; }
-        tr:hover td { background-color: #f8fafc; }
-        tr:hover .team-col { background-color: #f8fafc; }
-        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; color: #1e293b; }
+        .main-header { text-align: center; padding: 25px 0; }
+        .main-header h1 { margin: 0;font-size: 2.2rem;font-weight: 800; letter-spacing: -0.025em; }
+        .wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }
+        .table-title { padding: 15px 20px; font-weight: 700; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+        .table-title a { color: #2563eb; text-decoration: none; transition: 0.2s; }
+        .table-title a:hover { color: #1d4ed8; text-decoration: underline; }
+        .archive-link { font-size: 0.85rem; color: #64748b; font-weight: 500; }
+        table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+        th { background: #f8fafc; padding: 12px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #e2e8f0; cursor: pointer; transition: 0.2s; user-select: none; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
+        th:hover { background: #eff6ff; color: #2563eb; }
+        td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-col { position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 700; padding-left: 20px; width: 100px; color: #0f172a; }
+        .col-bo3 { width: 70px; }
+        .col-bo3-pct { width: 85px; }
+        .col-bo5 { width: 70px; }
+        .col-bo5-pct { width: 85px; }
+        .col-series { width: 80px; }
+        .col-series-wr { width: 100px; }
+        .col-game { width: 80px; }
+        .col-game-wr { width: 100px; }
+        .col-streak { width: 80px; }
+        .col-last { width: 130px; font-variant-numeric: tabular-nums; } /* 增加宽度以适应时间 */
         .badge { color: white; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; display: inline-block; min-width: 24px; }
         .footer { text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }
-        
-        /* 列宽微调 */
-        .col-last { width: 140px; font-variant-numeric: tabular-nums; }
+        tr:hover td { background-color: #f8fafc; }
+        tr:hover td.team-col { background-color: #f8fafc !important; }
     </style>
 </head>
 <body>
-    <header class="main-header"><h1>📊</h1></header>
+    <header class="main-header"><h1>🏆 League Stats</h1></header>
     <div style="max-width:1400px; margin:0 auto">
         <div class="wrapper">
             <div class="table-title">
-                <a class="title-link" href="https://lol.fandom.com/wiki/LPL/2026_Season/Split_1" target="_blank">2026 LPL Split 1</a>
-                <span class="archive-link">via Fandom • <a href="tournament/2026-lpl-split-1.md" target="_blank">Archive</a></span>
+                <span>2026 LCK Cup</span>
+                <span class="archive-link">
+                    <a href="https://lol.fandom.com/wiki/LCK/2026_Season/Cup" target="_blank">Source</a> • 
+                    <a href="tournament/2026-lck-cup.md" target="_blank">Archive</a>
+                </span>
             </div>
             <table id="t0">
                 <thead>
                     <tr>
                         <th class="team-col" onclick="doSort(0, 't0')">Team</th>
-                        <th onclick="doSort(2, 't0')">BO3 Fullrate</th>
-                        <th onclick="doSort(4, 't0')">BO5 Fullrate</th>
-                        <th onclick="doSort(6, 't0')">Series WR</th>
-                        <th onclick="doSort(8, 't0')">Game WR</th>
-                        <th onclick="doSort(9, 't0')">Streak</th>
-                        <th class="col-last" onclick="doSort(10, 't0')">Last Match (CST)</th>
+                        <th colspan="2" onclick="doSort(2, 't0')" style="text-align:center;">BO3 Fullrate</th>
+                        <th colspan="2" onclick="doSort(4, 't0')" style="text-align:center;">BO5 Fullrate</th>
+                        <th colspan="2" onclick="doSort(6, 't0')" style="text-align:center;">Series</th>
+                        <th colspan="2" onclick="doSort(8, 't0')" style="text-align:center;">Games</th>
+                        <th class="col-streak" onclick="doSort(9, 't0')">Streak</th>
+                        <th class="col-last" onclick="doSort(10, 't0')">Last Date (CST)</th>
                     </tr>
                 </thead>
                 <tbody></tbody></table></div>
-    <div class="footer">Last Update: 2026-01-28 23:22:51 CST | <a href="https://github.com/closur3/lol" target="_blank">GitHub</a></div>
+        <div class="wrapper">
+            <div class="table-title">
+                <span>2026 LPL Split 1</span>
+                <span class="archive-link">
+                    <a href="https://lol.fandom.com/wiki/LPL/2026_Season/Split_1" target="_blank">Source</a> • 
+                    <a href="tournament/2026-lpl-split-1.md" target="_blank">Archive</a>
+                </span>
+            </div>
+            <table id="t1">
+                <thead>
+                    <tr>
+                        <th class="team-col" onclick="doSort(0, 't1')">Team</th>
+                        <th colspan="2" onclick="doSort(2, 't1')" style="text-align:center;">BO3 Fullrate</th>
+                        <th colspan="2" onclick="doSort(4, 't1')" style="text-align:center;">BO5 Fullrate</th>
+                        <th colspan="2" onclick="doSort(6, 't1')" style="text-align:center;">Series</th>
+                        <th colspan="2" onclick="doSort(8, 't1')" style="text-align:center;">Games</th>
+                        <th class="col-streak" onclick="doSort(9, 't1')">Streak</th>
+                        <th class="col-last" onclick="doSort(10, 't1')">Last Date (CST)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody></table></div>
+    <div class="footer">Updated: 2026-01-28 23:40:58 CST | <a href="https://github.com/closur3/lol" target="_blank">GitHub</a></div>
     </div>
     <script>
         const COL_TEAM = 0;
+        const COL_SERIES_WR = 6;
+        const COL_GAME_WR = 8;
         const COL_LAST_DATE = 10;
         
         function doSort(columnIndex, tableId) {
@@ -66,15 +94,38 @@
             const rows = Array.from(tbody.rows);
             const stateKey = 'data-sort-dir-' + columnIndex;
             const currentDir = table.getAttribute(stateKey);
-            const nextDir = (!currentDir || currentDir === 'desc') ? 'asc' : 'desc';
+            
+            let nextDir;
+            if (!currentDir) {
+                nextDir = (columnIndex === COL_TEAM) ? 'asc' : 'desc';
+            } else {
+                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            }
             
             rows.sort((rowA, rowB) => {
-                let valA = getCellValue(rowA, columnIndex);
-                let valB = getCellValue(rowB, columnIndex);
+                let valueA = rowA.cells[columnIndex].innerText;
+                let valueB = rowB.cells[columnIndex].innerText;
                 
-                if (valA !== valB) {
-                    return nextDir === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+                if (columnIndex === COL_LAST_DATE) { 
+                    valueA = valueA === "-" ? 0 : new Date(valueA.replace(/-/g, '/')).getTime(); 
+                    valueB = valueB === "-" ? 0 : new Date(valueB.replace(/-/g, '/')).getTime(); 
+                } else { 
+                    valueA = parseValue(valueA);
+                    valueB = parseValue(valueB); 
                 }
+                
+                if (valueA !== valueB) {
+                    return nextDir === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
+                }
+                
+                if (columnIndex === COL_SERIES_WR) {
+                    let gameWrA = parseValue(rowA.cells[COL_GAME_WR].innerText);
+                    let gameWrB = parseValue(rowB.cells[COL_GAME_WR].innerText);
+                    if (gameWrA !== gameWrB) {
+                        return nextDir === 'asc' ? (gameWrA > gameWrB ? 1 : -1) : (gameWrA < gameWrB ? 1 : -1);
+                    }
+                }
+                
                 return 0;
             });
             
@@ -82,19 +133,18 @@
             rows.forEach(row => tbody.appendChild(row));
         }
         
-        function getCellValue(row, index) {
-            const text = row.cells[index].innerText;
-            if (index === COL_LAST_DATE) {
-                return text === "-" ? 0 : new Date(text).getTime();
+        function parseValue(value) {
+            if (value === "-") return -1;
+            if (value.includes('%')) return parseFloat(value);
+            if (value.includes('/')) { 
+                let parts = value.split('/'); 
+                return parts[1] === '-' ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
             }
-            if (index === COL_TEAM) return text.toLowerCase();
-            
-            // 提取百分比或数字
-            const match = text.match(/([\d\.]+)%/);
-            if (match) return parseFloat(match[1]);
-            
-            const num = parseFloat(text);
-            return isNaN(num) ? -1 : num;
+            if (value.includes('-') && value.split('-').length === 2) {
+                return parseFloat(value.split('-')[0]);
+            }
+            const number = parseFloat(value);
+            return isNaN(number) ? value.toLowerCase() : number;
         }
     </script>
 </body>
