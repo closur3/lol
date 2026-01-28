@@ -6,7 +6,6 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # ================== 配置 ==================
-# 这里的 url 字段仅用于显示，实际抓取使用 overview_page
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
@@ -43,7 +42,7 @@ COL_GAME_WR = 8
 COL_STREAK = 9
 COL_LAST_DATE = 10
 
-# ---------- 队名映射处理器 (你的原始逻辑) ----------
+# ---------- 队名映射处理器 ----------
 def load_team_map():
     if TEAMS_JSON.exists():
         try: return json.loads(TEAMS_JSON.read_text(encoding='utf-8'))
@@ -58,7 +57,7 @@ def get_short_name(full_name):
         if key.upper() in name_upper: return short_val
     return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
-# ---------- 辅助函数 (你的原始样式) ----------
+# ---------- 辅助函数 ----------
 def rate(numerator, denominator): 
     return numerator / denominator if denominator > 0 else None 
 
@@ -84,7 +83,7 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 (API源 + 修复日期为空的问题) ----------
+# ---------- 抓取逻辑 (API源 + 极度求稳版) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -96,14 +95,13 @@ def scrape(tournament):
         "streak_dirty": False, "last_date": None
     })
 
-    # --- API 请求 ---
     api_url = "https://lol.fandom.com/api.php"
     matches = []
     limit = 500
     offset = 0
     session = requests.Session()
-    # 必须伪装 User-Agent 防止被判断为脚本拦截返回空数据
-    session.headers.update({'User-Agent': 'LoLStatsBot/v3 (https://github.com/closur3/lol)'})
+    # 伪装 UA
+    session.headers.update({'User-Agent': 'LoLStatsBot/StableVersion (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...")
 
@@ -112,7 +110,6 @@ def scrape(tournament):
             "action": "cargoquery",
             "format": "json",
             "tables": "MatchSchedule",
-            # 不使用别名，直接获取原始字段，防止兼容性问题
             "fields": "Team1, Team2, Team1Score, Team2Score, DateTime_UTC, BestOf",
             "where": f"OverviewPage='{overview_page}'",
             "order_by": "DateTime_UTC ASC",
@@ -121,37 +118,47 @@ def scrape(tournament):
         }
 
         try:
-            time.sleep(1.0) # 稍微等待，防止速率限制返回空
-            response = session.get(api_url, params=params, timeout=15)
+            # --- 核心改动：慢一点好 ---
+            # 每次请求前强制休息 4 秒。这基本上不可能触发 Rate Limit。
+            time.sleep(4.0)
+            
+            response = session.get(api_url, params=params, timeout=20)
             data = response.json()
+            
+            # 如果触发限制，重睡 45 秒
+            if "error" in data:
+                print(f"   ⚠️ Rate Limit Hit. Sleeping 45s to cool down...")
+                time.sleep(45)
+                continue # 重试当前页
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
-                if len(batch) < limit: break
+                print(f"   -> Got {len(batch)} matches...")
+                
+                if len(batch) < limit:
+                    break
                 offset += limit
             else:
-                print(f"   Warning: No data in response: {data.keys()}")
+                print(f"   Warning: Unexpected response: {data.keys()}")
                 break
+                
         except Exception as e:
-            print(f"   Error: {e}")
-            break
-            
-    if not matches:
-        print("   -> 结果为空：可能是API连接问题或Key错误")
+            print(f"   Network Error: {e}. Sleeping 10s...")
+            time.sleep(10)
+            continue
 
     # --- 数据处理 ---
     for m in matches:
         team1 = get_short_name(m.get("Team1", ""))
         team2 = get_short_name(m.get("Team2", ""))
         
-        # 核心修复：尝试多种日期Key
+        # 兼容多种日期 Key
         date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
         
         raw_s1 = m.get("Team1Score")
         raw_s2 = m.get("Team2Score")
 
-        # 过滤
         if not (team1 and team2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
             continue
         
@@ -163,18 +170,14 @@ def scrape(tournament):
 
         # 时间处理 (UTC -> CST)
         try:
-            # 替换 +00:00 格式以防万一
-            clean_date = date_str.replace(" UTC", "")
-            if "+" in clean_date: clean_date = clean_date.split("+")[0]
-            
-            series_date = datetime.strptime(clean_date.strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
-        except Exception as e:
+            clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
+            series_date = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
+        except:
             series_date = None
 
         winner, loser = (team1, team2) if score1 > score2 else (team2, team1)
         max_score, min_score = max(score1, score2), min(score1, score2)
 
-        # 更新 (保留你的逻辑)
         for team in (team1, team2):
             if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]): 
                 stats[team]["last_date"] = series_date
@@ -185,7 +188,6 @@ def scrape(tournament):
         stats[team1]["game_wins"] += score1
         stats[team2]["game_wins"] += score2
         
-        # BO3/BO5
         best_of = m.get("BestOf")
         if best_of == "3" or (not best_of and max_score == 2):
             for team in (team1, team2): 
@@ -200,7 +202,6 @@ def scrape(tournament):
                 for team in (team1, team2): 
                     stats[team]["bo5_full"] += 1
         
-        # Streak
         if not stats[winner]["streak_dirty"]:
             if stats[winner]["streak_losses"] > 0: 
                 stats[winner]["streak_dirty"] = True
@@ -215,7 +216,7 @@ def scrape(tournament):
                 
     return stats
 
-# ---------- 生成 Markdown 归档 (增加小时显示) ----------
+# ---------- 生成 Markdown 归档 ----------
 def save_markdown(tournament, team_stats):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     
@@ -251,7 +252,7 @@ def save_markdown(tournament, team_stats):
         game_text = f"{game_wins}-{game_total-game_wins}" if game_total > 0 else "-"
         streak_display = f"{stat['streak_wins']}W" if stat['streak_wins'] > 0 else (f"{stat['streak_losses']}L" if stat['streak_losses'] > 0 else "-")
         
-        # [修改] 增加 %H:%M
+        # 显示小时分钟
         last_date_display = stat["last_date"].strftime("%Y-%m-%d %H:%M") if stat["last_date"] else "-"
         
         md_content += f"| {team_name} | {bo3_text} | {pct(bo3_ratio)} | {bo5_text} | {pct(bo5_ratio)} | {series_text} | {pct(series_win_ratio)} | {game_text} | {pct(game_win_ratio)} | {streak_display} | {last_date_display} |\n"
@@ -261,7 +262,7 @@ def save_markdown(tournament, team_stats):
     md_file.write_text(md_content, encoding='utf-8')
     print(f"✓ Archived: {md_file}")
 
-# ---------- 生成 HTML (增加小时显示) ----------
+# ---------- 生成 HTML ----------
 def build(all_data):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     html = f"""<!DOCTYPE html>
@@ -343,7 +344,7 @@ def build(all_data):
             
             streak_display = f"<span class='badge' style='background:#10b981'>{stat['streak_wins']}W</span>" if stat['streak_wins'] > 0 else (f"<span class='badge' style='background:#f43f5e'>{stat['streak_losses']}L</span>" if stat['streak_losses'] > 0 else "-")
             
-            # [修改] 增加 %H:%M
+            # 显示小时分钟
             last_date_display = stat["last_date"].strftime("%Y-%m-%d %H:%M") if stat["last_date"] else "-"
             
             bo3_text = f"{stat['bo3_full']}/{stat['bo3_total']}" if stat['bo3_total'] > 0 else "-"
