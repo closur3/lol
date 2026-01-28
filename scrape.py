@@ -6,8 +6,7 @@ from datetime import datetime, timezone, timedelta
 import time
 import sys
 
-# ================== 0. 全局常量 (移到最上方防止报错) ==================
-# 表格列索引 (Python 和 JS 共用)
+# ================== 0. 全局常量 ==================
 COL_TEAM = 0
 COL_BO3 = 1
 COL_BO3_PCT = 2
@@ -103,7 +102,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/ErrorFix (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/GlobalArchive (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -255,7 +254,6 @@ def process_time_stats(all_matches):
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
-        # 简化版 Match String 用于 HTML (带标签)
         match_str_html = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
         
         targets = []
@@ -263,17 +261,13 @@ def process_time_stats(all_matches):
         targets.append(time_data[region]['Total'])
         
         for t in targets:
-            # HTML 专用
-            t[weekday]['matches'].append(match_str_html)
-            t[7]['matches'].append(match_str_html)
-            # 数据统计
             t[weekday]['total'] += 1
+            t[weekday]['matches'].append(match_str_html)
+            if is_full: t[weekday]['full'] += 1
             t[7]['total'] += 1
-            if is_full: 
-                t[weekday]['full'] += 1
-                t[7]['full'] += 1
+            t[7]['matches'].append(match_str_html)
+            if is_full: t[7]['full'] += 1
             
-        # Grand Total
         time_data["ALL"][weekday]['total'] += 1
         time_data["ALL"][weekday]['matches'].append(match_str_html)
         if is_full: time_data["ALL"][weekday]['full'] += 1
@@ -285,10 +279,7 @@ def process_time_stats(all_matches):
     return time_data
 
 def generate_markdown_time_table(time_data):
-    """
-    生成纯文本 Markdown 表格
-    格式: 打满/总场 (百分比%)
-    """
+    """生成 Markdown 表格 (包含所有赛区数据)"""
     md = "\n### Time Distribution (Full Series Rate)\n\n"
     md += "| Time Slot | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Total |\n"
     md += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
@@ -306,8 +297,7 @@ def generate_markdown_time_table(time_data):
 
     for region, h_key, label in rows_config:
         line = f"| {label} |"
-        for w in range(8): # 0-7
-            # 获取单元格数据
+        for w in range(8):
             if region == "ALL":
                 cell = time_data["ALL"][w]
             else:
@@ -325,7 +315,7 @@ def generate_markdown_time_table(time_data):
     return md
 
 # ================== 5. 输出生成 ==================
-def save_markdown(tournament, team_stats, matches):
+def save_markdown(tournament, team_stats, global_matches):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     lp_url = f"https://lol.fandom.com/wiki/{tournament['overview_page'].replace(' ', '_')}"
     
@@ -364,8 +354,8 @@ def save_markdown(tournament, team_stats, matches):
         
         md_content += f"| {team_name} | {bo3_text} | {pct(bo3_ratio)} | {bo5_text} | {pct(bo5_ratio)} | {series_text} | {pct(series_win_ratio)} | {game_text} | {pct(game_win_ratio)} | {streak_display} | {last_date_display} |\n"
     
-    # [新增] 计算时间分布并追加到 Markdown
-    time_stats = process_time_stats(matches)
+    # [关键] 传入的是 global_matches，所以生成的表是“全”的
+    time_stats = process_time_stats(global_matches)
     md_table = generate_markdown_time_table(time_stats)
     md_content += md_table
     
@@ -664,18 +654,35 @@ def build(all_data, all_matches_global):
     print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (Clean Archive Mode)...", flush=True)
-    data = {}
+    print("Starting LoL Stats Scraper (Global View)...", flush=True)
+    
+    # 1. 临时存储，不要直接写MD
+    data_store = []
     all_matches_global = [] 
     
+    # 2. 循环抓取所有数据
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
         team_stats, matches = scrape(tournament)
         
-        data[tournament["slug"]] = team_stats
-        all_matches_global.extend(matches) 
+        # 累积全局数据
+        all_matches_global.extend(matches)
         
-        save_markdown(tournament, team_stats, matches)
+        # 暂存当前比赛的统计数据
+        data_store.append({
+            "tournament": tournament,
+            "stats": team_stats
+        })
     
-    build(data, all_matches_global)
+    # 3. 数据全齐了，开始生成文件
+    print("\nWriting files with GLOBAL data...", flush=True)
+    
+    # 生成 Markdown (每个文件都包含完整的 global_matches)
+    for item in data_store:
+        save_markdown(item["tournament"], item["stats"], all_matches_global)
+        
+    # 生成 HTML (需要所有比赛的 stats 字典)
+    html_data = {item["tournament"]["slug"]: item["stats"] for item in data_store}
+    build(html_data, all_matches_global)
+    
     print("\n✅ All done!", flush=True)
