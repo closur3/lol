@@ -1,7 +1,7 @@
 # 2026 LPL Split 1
 
 **Source:** [https://lol.fandom.com/wiki/LPL/2026_Season/Split_1](https://lol.fandom.com/wiki/LPL/2026_Season/Split_1)  
-**Updated:** 2026-01-29 00:16:07 CST
+**Updated:** 2026-01-29 00:20:54 CST
 
 ---
 
