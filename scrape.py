@@ -149,7 +149,7 @@ def build(all_data):
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoL Insights Pro</title>
+    <title>LoL Insights</title>
     <style>
         body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
         .main-header {{ text-align: center; padding: 25px 0; }}
@@ -177,7 +177,7 @@ def build(all_data):
     </style>
 </head>
 <body>
-    <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
+    <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
     for index, tournament in enumerate(TOURNAMENTS):
