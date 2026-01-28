@@ -30,19 +30,6 @@ GITHUB_REPO = "https://github.com/closur3/lol"
 TOURNAMENT_DIR.mkdir(exist_ok=True)
 CST = timezone(timedelta(hours=8)) 
 
-# 表格列索引
-COL_TEAM = 0
-COL_BO3 = 1
-COL_BO3_PCT = 2
-COL_BO5 = 3
-COL_BO5_PCT = 4
-COL_SERIES = 5
-COL_SERIES_WR = 6
-COL_GAME = 7
-COL_GAME_WR = 8
-COL_STREAK = 9
-COL_LAST_DATE = 10
-
 # ================== 2. 辅助工具 ==================
 def load_team_map():
     if TEAMS_JSON.exists():
@@ -61,16 +48,12 @@ def get_short_name(full_name):
 def rate(n, d): return n / d if d > 0 else None 
 def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
 
-# [视觉优化] 降低饱和度(s=55)，调整亮度(l=50)，实现"莫兰迪/哑光"风格，不瞎眼
 def get_hsl(hue, saturation=55, lightness=50): 
     return f"hsl({int(hue)}, {saturation}%, {lightness}%)"
 
 def color_by_ratio(ratio, reverse=False):
     if ratio is None: return "#f1f5f9"
-    # reverse=True (打满率): 0(绿) -> 1(红)
-    # reverse=False (胜率): 0(红) -> 1(绿)
     hue = (1 - max(0, min(1, ratio))) * 140 if reverse else max(0, min(1, ratio)) * 140
-    # 使用优化后的哑光色函数
     return get_hsl(hue)
 
 def color_by_date(date, all_dates):
@@ -80,7 +63,6 @@ def color_by_date(date, all_dates):
         max_ts = max(d.timestamp() for d in all_dates)
         min_ts = min(d.timestamp() for d in all_dates)
         factor = (ts - min_ts) / (max_ts - min_ts) if max_ts != min_ts else 1
-        # 日期也使用低饱和度的蓝色
         return f"hsl(215, {int(factor * 60 + 20)}%, {int(60 - factor * 10)}%)"
     except:
         return "#9ca3af"
@@ -107,7 +89,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/EyeFriendly (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/SimpleArchive (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -130,7 +112,6 @@ def scrape(tournament):
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
-            # [关键] 遇到错误立即换行并提示
             if "error" in data:
                 print("FAILED!", flush=True)
                 print(f"      ⚠️  RATE LIMIT HIT! (API refused connection)", flush=True)
@@ -260,7 +241,8 @@ def process_time_stats(all_matches):
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
-        match_str = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
+        # HTML 交互数据 (Markdown 不用)
+        match_str_html = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
         
         targets = []
         if target_hour is not None: targets.append(time_data[region][target_hour])
@@ -268,90 +250,66 @@ def process_time_stats(all_matches):
         
         for t in targets:
             t[weekday]['total'] += 1
-            t[weekday]['matches'].append(match_str)
+            t[weekday]['matches'].append(match_str_html)
             if is_full: t[weekday]['full'] += 1
+            # Grand Total Logic
             t[7]['total'] += 1
-            t[7]['matches'].append(match_str)
+            t[7]['matches'].append(match_str_html)
             if is_full: t[7]['full'] += 1
             
         time_data["ALL"][weekday]['total'] += 1
-        time_data["ALL"][weekday]['matches'].append(match_str)
+        time_data["ALL"][weekday]['matches'].append(match_str_html)
         if is_full: time_data["ALL"][weekday]['full'] += 1
         
         time_data["ALL"][7]['total'] += 1
-        time_data["ALL"][7]['matches'].append(match_str)
+        time_data["ALL"][7]['matches'].append(match_str_html)
         if is_full: time_data["ALL"][7]['full'] += 1
         
     return time_data
 
-def generate_time_table_html(time_data):
-    html = """
-    <div class="wrapper" style="margin-top: 40px;">
-        <div class="table-title">📅 Full Series Distribution</div>
-        <table id="time-stats">
-            <thead>
-                <tr>
-                    <th class="team-col">Time Slot</th>
+def generate_markdown_time_table(time_data):
     """
-    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Total"]:
-        html += f"<th>{day}</th>"
-    html += "</tr></thead><tbody>"
+    生成纯文本 Markdown 表格
+    格式: 打满/总场 (百分比%)
+    """
+    md = "\n### Time Distribution (Full Series Rate)\n\n"
+    md += "| Time Slot | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Total |\n"
+    md += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
     
+    # 不做赛区过滤，全部展示
     rows_config = [
-        ("LCK", 16, "LCK 16:00"), ("LCK", 18, "LCK 18:00"), ("LCK", "Total", "LCK Total"),
-        ("LPL", 15, "LPL 15:00"), ("LPL", 17, "LPL 17:00"), ("LPL", 19, "LPL 19:00"), ("LPL", "Total", "LPL Total"),
+        ("LCK", 16, "LCK 16:00"), 
+        ("LCK", 18, "LCK 18:00"), 
+        ("LCK", "Total", "**LCK Total**"),
+        ("LPL", 15, "LPL 15:00"), 
+        ("LPL", 17, "LPL 17:00"), 
+        ("LPL", 19, "LPL 19:00"), 
+        ("LPL", "Total", "**LPL Total**"),
+        ("ALL", "Grand", "**GRAND**") # ALL 结构特殊，需单独处理 key
     ]
-    
-    for region, hour, label in rows_config:
-        is_total_row = (hour == "Total")
-        row_style = "font-weight:bold; background:#f8fafc;" if is_total_row else ""
-        label_style = "background:#f1f5f9;" if is_total_row else ""
-        
-        html += f"<tr style='{row_style}'><td class='team-col' style='{label_style}'>{label}</td>"
-        
-        for w in range(8):
-            cell = time_data[region][hour][w]
+
+    for region, h_key, label in rows_config:
+        line = f"| {label} |"
+        for w in range(8): # 0-7
+            # 获取单元格数据
+            if region == "ALL":
+                cell = time_data["ALL"][w] # ALL 直接在最外层
+            else:
+                cell = time_data[region][h_key][w]
+                
             total, full = cell['total'], cell['full']
-            matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
             
             if total == 0:
-                # 统一空数据样式
-                html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
+                line += " - |"
             else:
-                ratio = full / total
-                # [视觉优化] 使用 reverse=True (绿->红)，但使用哑光色
-                bg_color = color_by_ratio(ratio, reverse=True)
-                # 白色文字
-                html += f"<td style='background:{bg_color}; color:white; font-weight:bold; cursor:pointer;' onclick='showPopup(\"{label}\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
-        html += "</tr>"
+                pct_val = int(full / total * 100)
+                line += f" {full}/{total} ({pct_val}%) |"
+        md += line + "\n"
     
-    html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
-    for w in range(8):
-        cell = time_data["ALL"][w]
-        total, full = cell['total'], cell['full']
-        matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
-        
-        if total == 0:
-            html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
-        else:
-            ratio = full / total
-            bg_color = color_by_ratio(ratio, reverse=True)
-            html += f"<td style='background:{bg_color}; color:white; cursor:pointer;' onclick='showPopup(\"GRAND\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
-    html += "</tr></tbody></table></div>"
-    
-    html += """
-    <div id="matchModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closePopup()">&times;</span>
-            <h3 id="modalTitle">Match History</h3>
-            <div id="modalList" class="match-list"></div>
-        </div>
-    </div>
-    """
-    return html
+    return md
 
 # ================== 5. 输出生成 ==================
-def save_markdown(tournament, team_stats):
+def save_markdown(tournament, team_stats, matches):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     lp_url = f"https://lol.fandom.com/wiki/{tournament['overview_page'].replace(' ', '_')}"
     
@@ -390,15 +348,84 @@ def save_markdown(tournament, team_stats):
         
         md_content += f"| {team_name} | {bo3_text} | {pct(bo3_ratio)} | {bo5_text} | {pct(bo5_ratio)} | {series_text} | {pct(series_win_ratio)} | {game_text} | {pct(game_win_ratio)} | {streak_display} | {last_date_display} |\n"
     
+    # [新增] 计算时间分布并追加到 Markdown
+    time_stats = process_time_stats(matches)
+    md_table = generate_markdown_time_table(time_stats)
+    md_content += md_table
+    
     md_content += f"\n---\n\n*Generated by [LoL Stats Scraper]({GITHUB_REPO})*\n"
+    
     md_file = TOURNAMENT_DIR / f"{tournament['slug']}.md"
     md_file.write_text(md_content, encoding='utf-8')
     print(f"   ✓ Archived Markdown: {md_file}", flush=True)
 
+def generate_time_table_html(time_data):
+    html = """
+    <div class="wrapper" style="margin-top: 40px;">
+        <div class="table-title">📅 Full Series Distribution</div>
+        <table id="time-stats">
+            <thead>
+                <tr>
+                    <th class="team-col">Time Slot</th>
+    """
+    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Total"]:
+        html += f"<th>{day}</th>"
+    html += "</tr></thead><tbody>"
+    
+    rows_config = [
+        ("LCK", 16, "LCK 16:00"), ("LCK", 18, "LCK 18:00"), ("LCK", "Total", "LCK Total"),
+        ("LPL", 15, "LPL 15:00"), ("LPL", 17, "LPL 17:00"), ("LPL", 19, "LPL 19:00"), ("LPL", "Total", "LPL Total"),
+    ]
+    
+    for region, hour, label in rows_config:
+        is_total_row = (hour == "Total")
+        row_style = "font-weight:bold; background:#f8fafc;" if is_total_row else ""
+        label_style = "background:#f1f5f9;" if is_total_row else ""
+        
+        html += f"<tr style='{row_style}'><td class='team-col' style='{label_style}'>{label}</td>"
+        
+        for w in range(8):
+            cell = time_data[region][hour][w]
+            total, full = cell['total'], cell['full']
+            matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
+            
+            if total == 0:
+                html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
+            else:
+                ratio = full / total
+                bg_color = color_by_ratio(ratio, reverse=True)
+                html += f"<td style='background:{bg_color}; color:white; font-weight:bold; cursor:pointer;' onclick='showPopup(\"{label}\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
+        html += "</tr>"
+    
+    html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
+    for w in range(8):
+        cell = time_data["ALL"][w]
+        total, full = cell['total'], cell['full']
+        matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
+        
+        if total == 0:
+            html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
+        else:
+            ratio = full / total
+            bg_color = color_by_ratio(ratio, reverse=True)
+            html += f"<td style='background:{bg_color}; color:white; cursor:pointer;' onclick='showPopup(\"GRAND\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
+    html += "</tr></tbody></table></div>"
+    
+    html += """
+    <div id="matchModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closePopup()">&times;</span>
+            <h3 id="modalTitle">Match History</h3>
+            <div id="modalList" class="match-list"></div>
+        </div>
+    </div>
+    """
+    return html
+
 def build(all_data, all_matches_global):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
-    time_table_html = generate_time_table_html(process_time_stats(all_matches_global))
     
+    # HTML 主体部分
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -448,7 +475,7 @@ def build(all_data, all_matches_global):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # --- 渲染原有的赛事表 ---
+    # 循环生成每个赛事的主表
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -514,7 +541,8 @@ def build(all_data, all_matches_global):
                 </tr>"""
         html += "</tbody></table></div>"
 
-    html += time_table_html
+    # 生成 HTML 的时间分布表
+    html += generate_time_table_html(process_time_stats(all_matches_global))
 
     html += f"""
     <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
@@ -621,7 +649,7 @@ def build(all_data, all_matches_global):
     print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (Interactive/Final)...", flush=True)
+    print("Starting LoL Stats Scraper (Clean Archive Mode)...", flush=True)
     data = {}
     all_matches_global = [] 
     
@@ -632,7 +660,7 @@ if __name__ == "__main__":
         data[tournament["slug"]] = team_stats
         all_matches_global.extend(matches) 
         
-        save_markdown(tournament, team_stats)
+        save_markdown(tournament, team_stats, matches)
     
     build(data, all_matches_global)
     print("\n✅ All done!", flush=True)
