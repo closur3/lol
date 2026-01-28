@@ -154,7 +154,7 @@ def build(all_data):
     <style>
         body {{ font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }}
         .main-header {{ text-align: center; padding: 25px 0; }}
-        .main-header h1 {margin: 0;font-size: 2.2rem;font-weight: 800;}
+        .main-header h1 {{ margin: 0;font-size: 2.2rem;font-weight: 800; }}
         .wrapper {{ width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }}
         .table-title {{ padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }}
         .table-title a {{ color: #2563eb; text-decoration: none; }}
