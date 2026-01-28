@@ -61,13 +61,17 @@ def get_short_name(full_name):
 def rate(n, d): return n / d if d > 0 else None 
 def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
 
-def get_hsl(hue, saturation=70, lightness=45): 
+# [视觉优化] 降低饱和度(s=55)，调整亮度(l=50)，实现"莫兰迪/哑光"风格，不瞎眼
+def get_hsl(hue, saturation=55, lightness=50): 
     return f"hsl({int(hue)}, {saturation}%, {lightness}%)"
 
 def color_by_ratio(ratio, reverse=False):
     if ratio is None: return "#f1f5f9"
+    # reverse=True (打满率): 0(绿) -> 1(红)
+    # reverse=False (胜率): 0(红) -> 1(绿)
     hue = (1 - max(0, min(1, ratio))) * 140 if reverse else max(0, min(1, ratio)) * 140
-    return get_hsl(hue, saturation=65, lightness=48)
+    # 使用优化后的哑光色函数
+    return get_hsl(hue)
 
 def color_by_date(date, all_dates):
     if not date or not all_dates: return "#9ca3af"
@@ -76,7 +80,8 @@ def color_by_date(date, all_dates):
         max_ts = max(d.timestamp() for d in all_dates)
         min_ts = min(d.timestamp() for d in all_dates)
         factor = (ts - min_ts) / (max_ts - min_ts) if max_ts != min_ts else 1
-        return f"hsl(215, {int(factor * 80 + 20)}%, {int(55 - factor * 15)}%)"
+        # 日期也使用低饱和度的蓝色
+        return f"hsl(215, {int(factor * 60 + 20)}%, {int(60 - factor * 10)}%)"
     except:
         return "#9ca3af"
 
@@ -102,7 +107,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/Interactive (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/EyeFriendly (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -125,6 +130,7 @@ def scrape(tournament):
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
+            # [关键] 遇到错误立即换行并提示
             if "error" in data:
                 print("FAILED!", flush=True)
                 print(f"      ⚠️  RATE LIMIT HIT! (API refused connection)", flush=True)
@@ -218,10 +224,8 @@ def scrape(tournament):
                 
     return stats, valid_matches
 
-# ================== 4. 时间分布表计算 (含比赛详情) ==================
+# ================== 4. 时间分布表计算 ==================
 def process_time_stats(all_matches):
-    # 数据结构升级：增加 'matches' 列表存储详情
-    # matches 格式: "MM-DD | T1 vs T2 (2-1)"
     time_data = {
         "LCK": {h: {w: {'full':0, 'total':0, 'matches':[]} for w in range(8)} for h in [16, 18, 'Total']},
         "LPL": {h: {w: {'full':0, 'total':0, 'matches':[]} for w in range(8)} for h in [15, 17, 19, 'Total']},
@@ -256,8 +260,6 @@ def process_time_stats(all_matches):
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
-        # 生成比赛简报字符串
-        # [修改] 打满的比赛加个 🔥 标记
         match_str = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
         
         targets = []
@@ -265,16 +267,13 @@ def process_time_stats(all_matches):
         targets.append(time_data[region]['Total'])
         
         for t in targets:
-            # 每日
             t[weekday]['total'] += 1
             t[weekday]['matches'].append(match_str)
             if is_full: t[weekday]['full'] += 1
-            # 横向总计
             t[7]['total'] += 1
             t[7]['matches'].append(match_str)
             if is_full: t[7]['full'] += 1
             
-        # Grand Total
         time_data["ALL"][weekday]['total'] += 1
         time_data["ALL"][weekday]['matches'].append(match_str)
         if is_full: time_data["ALL"][weekday]['full'] += 1
@@ -303,7 +302,6 @@ def generate_time_table_html(time_data):
         ("LPL", 15, "LPL 15:00"), ("LPL", 17, "LPL 17:00"), ("LPL", 19, "LPL 19:00"), ("LPL", "Total", "LPL Total"),
     ]
     
-    # 渲染赛区行
     for region, hour, label in rows_config:
         is_total_row = (hour == "Total")
         row_style = "font-weight:bold; background:#f8fafc;" if is_total_row else ""
@@ -314,21 +312,19 @@ def generate_time_table_html(time_data):
         for w in range(8):
             cell = time_data[region][hour][w]
             total, full = cell['total'], cell['full']
-            
-            # [关键] 注入交互数据
-            # 必须先把 matches 列表转为 JSON 字符串，并处理引号
             matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
             
             if total == 0:
+                # 统一空数据样式
                 html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
             else:
                 ratio = full / total
+                # [视觉优化] 使用 reverse=True (绿->红)，但使用哑光色
                 bg_color = color_by_ratio(ratio, reverse=True)
-                # 添加 onclick 事件
-                html += f"<td style='background:{bg_color}; color:black; cursor:pointer;' onclick='showPopup(\"{label}\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
+                # 白色文字
+                html += f"<td style='background:{bg_color}; color:white; font-weight:bold; cursor:pointer;' onclick='showPopup(\"{label}\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
         html += "</tr>"
     
-    # 渲染 Grand Total
     html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
     for w in range(8):
         cell = time_data["ALL"][w]
@@ -340,10 +336,9 @@ def generate_time_table_html(time_data):
         else:
             ratio = full / total
             bg_color = color_by_ratio(ratio, reverse=True)
-            html += f"<td style='background:{bg_color}; color:black; cursor:pointer;' onclick='showPopup(\"GRAND TOTAL\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
+            html += f"<td style='background:{bg_color}; color:white; cursor:pointer;' onclick='showPopup(\"GRAND\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.8; font-weight:normal'>({int(ratio*100)}%)</span></td>"
     html += "</tr></tbody></table></div>"
     
-    # 添加 Modal 的 HTML 结构
     html += """
     <div id="matchModal" class="modal">
         <div class="modal-content">
@@ -589,7 +584,6 @@ def build(all_data, all_matches_global):
             return isNaN(number) ? value.toLowerCase() : number;
         }}
 
-        // Modal Logic
         function showPopup(title, dayIndex, matches) {{
             const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Total"];
             document.getElementById('modalTitle').innerText = title + " - " + days[dayIndex];
@@ -614,7 +608,6 @@ def build(all_data, all_matches_global):
             document.getElementById('matchModal').style.display = "none";
         }}
         
-        // Close modal when clicking outside
         window.onclick = function(event) {{
             const modal = document.getElementById('matchModal');
             if (event.target == modal) {{
