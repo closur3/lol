@@ -1,58 +1,46 @@
 import requests
 import json
+from datetime import datetime
 
-def probe_tournament_name(team_code, year="2026"):
-    print(f"🔍 正在探测 {team_code} 在 {year} 年的比赛记录...")
+def probe_global_latest():
+    print("🌍 正在扫描 Leaguepedia 最近录入的比赛数据 (不分战队)...")
     
     url = "https://lol.fandom.com/api.php"
     params = {
         "action": "cargoquery",
         "format": "json",
         "tables": "MatchSchedule",
-        "fields": "OverviewPage, Tournament, DateTime_UTC, Team1, Team2, Winner",
-        # 查找 Team1 是该队伍 且 时间在 2026年之后 的比赛
-        "where": f"(Team1='{team_code}' OR Team2='{team_code}') AND DateTime_UTC >= '{year}-01-01'",
+        "fields": "OverviewPage, Team1, Team2, Score1, Score2, DateTime_UTC, Winner",
+        # 只要是 2026-01-10 之后的比赛都拿出来看看
+        "where": "DateTime_UTC >= '2026-01-10' AND Score1 IS NOT NULL", 
         "order_by": "DateTime_UTC DESC",
-        "limit": 5
+        "limit": 10
     }
     
     try:
-        response = requests.get(url, params=params, headers={'User-Agent': 'DebugBot/1.0'}, timeout=10)
+        response = requests.get(url, params=params, headers={'User-Agent': 'ProbeBot/1.0'}, timeout=15)
         data = response.json()
         
         matches = data.get("cargoquery", [])
         if not matches:
-            print(f"❌ 未找到 {team_code} 在 {year} 的任何比赛数据。")
-            print("   可能原因：")
-            print("   1. 该队伍今年还没打比赛。")
-            print("   2. Wiki 还没录入数据。")
+            print("❌ 依然没有抓到数据。这说明可能是 where 条件的时间或者字段名有问题。")
+            print("尝试移除 'Score1 IS NOT NULL' 再试一次...")
             return
 
-        print(f"✅ 找到 {len(matches)} 场比赛。以下是 API 返回的关键字段：")
-        print("-" * 60)
-        print(f"{'Date':<20} | {'OverviewPage (复制这个!)':<30} | {'Tournament'}")
-        print("-" * 60)
+        print(f"✅ 成功抓取到 {len(matches)} 条最近比赛记录！")
+        print("请仔细对比下表中的【OverviewPage】和【Team Name】：")
+        print("=" * 100)
+        print(f"{'Time (UTC)':<18} | {'OverviewPage (复制这个到配置里)':<40} | {'Team1'}")
+        print("-" * 100)
         
-        found_names = set()
         for item in matches:
             m = item["title"]
-            date = m.get("DateTime_UTC", "N/A")
-            overview = m.get("OverviewPage", "Unknown")
-            tourney = m.get("Tournament", "Unknown")
-            print(f"{date:<20} | {overview:<30} | {tourney}")
-            found_names.add(overview)
+            print(f"{m.get('DateTime_UTC', '')[:16]:<18} | {m.get('OverviewPage', ''):<40} | {m.get('Team1', '')}")
             
-        print("-" * 60)
-        print("💡 建议在配置中使用的名称:")
-        for name in found_names:
-            print(f'   "overview_page": "{name}"')
+        print("=" * 100)
 
     except Exception as e:
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    # 探测 LPL (用 BLG 代表)
-    probe_tournament_name("BLG")
-    print("\n" + "="*60 + "\n")
-    # 探测 LCK (用 T1 代表)
-    probe_tournament_name("T1")
+    probe_global_latest()
