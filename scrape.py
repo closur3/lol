@@ -80,7 +80,6 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# [修改] 简单的倒计时，不换行，视觉更紧凑
 def wait_simple(seconds, reason="Cooldown"):
     print(f"      ⏳ {reason} ({seconds}s)...", end="", flush=True)
     time.sleep(seconds)
@@ -103,7 +102,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/LogOptimized (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/Interactive (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -126,7 +125,6 @@ def scrape(tournament):
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
-            # [关键修改] 遇到错误立即换行打印，不要让用户猜
             if "error" in data:
                 print("FAILED!", flush=True)
                 print(f"      ⚠️  RATE LIMIT HIT! (API refused connection)", flush=True)
@@ -220,12 +218,14 @@ def scrape(tournament):
                 
     return stats, valid_matches
 
-# ================== 4. 时间分布表计算 ==================
+# ================== 4. 时间分布表计算 (含比赛详情) ==================
 def process_time_stats(all_matches):
+    # 数据结构升级：增加 'matches' 列表存储详情
+    # matches 格式: "MM-DD | T1 vs T2 (2-1)"
     time_data = {
-        "LCK": {h: {w: {'full':0, 'total':0} for w in range(8)} for h in [16, 18, 'Total']},
-        "LPL": {h: {w: {'full':0, 'total':0} for w in range(8)} for h in [15, 17, 19, 'Total']},
-        "ALL": {w: {'full':0, 'total':0} for w in range(8)}
+        "LCK": {h: {w: {'full':0, 'total':0, 'matches':[]} for w in range(8)} for h in [16, 18, 'Total']},
+        "LPL": {h: {w: {'full':0, 'total':0, 'matches':[]} for w in range(8)} for h in [15, 17, 19, 'Total']},
+        "ALL": {w: {'full':0, 'total':0, 'matches':[]} for w in range(8)}
     }
     
     for m in all_matches:
@@ -256,19 +256,31 @@ def process_time_stats(all_matches):
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
+        # 生成比赛简报字符串
+        # [修改] 打满的比赛加个 🔥 标记
+        match_str = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
+        
         targets = []
         if target_hour is not None: targets.append(time_data[region][target_hour])
         targets.append(time_data[region]['Total'])
         
         for t in targets:
+            # 每日
             t[weekday]['total'] += 1
+            t[weekday]['matches'].append(match_str)
             if is_full: t[weekday]['full'] += 1
+            # 横向总计
             t[7]['total'] += 1
+            t[7]['matches'].append(match_str)
             if is_full: t[7]['full'] += 1
             
+        # Grand Total
         time_data["ALL"][weekday]['total'] += 1
+        time_data["ALL"][weekday]['matches'].append(match_str)
         if is_full: time_data["ALL"][weekday]['full'] += 1
+        
         time_data["ALL"][7]['total'] += 1
+        time_data["ALL"][7]['matches'].append(match_str)
         if is_full: time_data["ALL"][7]['full'] += 1
         
     return time_data
@@ -291,6 +303,7 @@ def generate_time_table_html(time_data):
         ("LPL", 15, "LPL 15:00"), ("LPL", 17, "LPL 17:00"), ("LPL", 19, "LPL 19:00"), ("LPL", "Total", "LPL Total"),
     ]
     
+    # 渲染赛区行
     for region, hour, label in rows_config:
         is_total_row = (hour == "Total")
         row_style = "font-weight:bold; background:#f8fafc;" if is_total_row else ""
@@ -302,31 +315,44 @@ def generate_time_table_html(time_data):
             cell = time_data[region][hour][w]
             total, full = cell['total'], cell['full']
             
+            # [关键] 注入交互数据
+            # 必须先把 matches 列表转为 JSON 字符串，并处理引号
+            matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
+            
             if total == 0:
                 html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
             else:
                 ratio = full / total
-                # [修改] 使用浅色背景 (85% lightness)，黑色文字
-                # 色相: 绿(0%) -> 红(100%)
-                hue = (1 - ratio) * 140 
-                bg_color = f"hsl({int(hue)}, 70%, 85%)"
-                
-                # [修改] 格式：3/6 (50%)
-                html += f"<td style='background:{bg_color}; color:black'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
+                bg_color = color_by_ratio(ratio, reverse=True)
+                # 添加 onclick 事件
+                html += f"<td style='background:{bg_color}; color:black; cursor:pointer;' onclick='showPopup(\"{label}\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
         html += "</tr>"
-        
+    
+    # 渲染 Grand Total
     html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
     for w in range(8):
         cell = time_data["ALL"][w]
         total, full = cell['total'], cell['full']
+        matches_json = json.dumps(cell['matches']).replace("'", "&apos;").replace('"', '&quot;')
+        
         if total == 0:
             html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
         else:
             ratio = full / total
-            hue = (1 - ratio) * 140 
-            bg_color = f"hsl({int(hue)}, 70%, 85%)"
-            html += f"<td style='background:{bg_color}; color:black'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
+            bg_color = color_by_ratio(ratio, reverse=True)
+            html += f"<td style='background:{bg_color}; color:black; cursor:pointer;' onclick='showPopup(\"GRAND TOTAL\", {w}, {matches_json})'>{full}/{total} <span style='font-size:11px; opacity:0.6'>({int(ratio*100)}%)</span></td>"
     html += "</tr></tbody></table></div>"
+    
+    # 添加 Modal 的 HTML 结构
+    html += """
+    <div id="matchModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closePopup()">&times;</span>
+            <h3 id="modalTitle">Match History</h3>
+            <div id="modalList" class="match-list"></div>
+        </div>
+    </div>
+    """
     return html
 
 # ================== 5. 输出生成 ==================
@@ -410,12 +436,24 @@ def build(all_data, all_matches_global):
         .col-last {{ width: 120px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
         .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
+        
+        /* Modal Styles */
+        .modal {{ display: none; position: fixed; z-index: 99; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); backdrop-filter: blur(2px); }}
+        .modal-content {{ background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 300px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: fadeIn 0.2s; }}
+        .close {{ color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }}
+        .close:hover {{ color: black; }}
+        @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(-10px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+        .match-list {{ margin-top: 15px; max-height: 300px; overflow-y: auto; }}
+        .match-item {{ padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; display: flex; justify-content: space-between; }}
+        .date {{ color: #94a3b8; font-family: monospace; margin-right: 10px; }}
+        .full-match {{ color: #e11d48; font-weight: 600; }}
     </style>
 </head>
 <body>
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
+    # --- 渲染原有的赛事表 ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -550,6 +588,39 @@ def build(all_data, all_matches_global):
             const number = parseFloat(value);
             return isNaN(number) ? value.toLowerCase() : number;
         }}
+
+        // Modal Logic
+        function showPopup(title, dayIndex, matches) {{
+            const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Total"];
+            document.getElementById('modalTitle').innerText = title + " - " + days[dayIndex];
+            const list = document.getElementById('modalList');
+            list.innerHTML = "";
+            
+            if (matches.length === 0) {{
+                list.innerHTML = "<div style='text-align:center;color:#999;padding:20px'>No matches found</div>";
+            }} else {{
+                matches.forEach(m => {{
+                    const div = document.createElement('div');
+                    div.className = 'match-item';
+                    div.innerHTML = m;
+                    list.appendChild(div);
+                }});
+            }}
+            
+            document.getElementById('matchModal').style.display = "block";
+        }}
+        
+        function closePopup() {{
+            document.getElementById('matchModal').style.display = "none";
+        }}
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {{
+            const modal = document.getElementById('matchModal');
+            if (event.target == modal) {{
+                modal.style.display = "none";
+            }}
+        }}
     </script>
 </body>
 </html>"""
@@ -557,7 +628,7 @@ def build(all_data, all_matches_global):
     print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (MultiTables/Clean)...", flush=True)
+    print("Starting LoL Stats Scraper (Interactive/Final)...", flush=True)
     data = {}
     all_matches_global = [] 
     
