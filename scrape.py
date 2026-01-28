@@ -12,13 +12,13 @@ TOURNAMENTS = [
         "slug": "2026-lck-cup", 
         "title": "2026 LCK Cup", 
         "overview_page": "LCK/2026 Season/Cup",
-        "region": "LCK" # 新增字段：用于区分赛区统计
+        "region": "LCK" 
     },
     {
         "slug": "2026-lpl-split-1", 
         "title": "2026 LPL Split 1", 
         "overview_page": "LPL/2026 Season/Split 1",
-        "region": "LPL" # 新增字段
+        "region": "LPL"
     },
 ]
 
@@ -80,13 +80,10 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-def wait_with_progress(seconds):
-    print(f"      ⏳ Cooling down: ", end="", flush=True)
-    for i in range(seconds, 0, -1):
-        if i < 4 or i % 5 == 0:
-            print(f"{i}..", end="", flush=True)
-        time.sleep(1)
-    print("Go!", flush=True)
+def wait_simple(seconds, reason="Cooldown"):
+    print(f"      ⏳ {reason} ({seconds}s)...", end="", flush=True)
+    time.sleep(seconds)
+    print(" Done.", flush=True)
 
 # ================== 3. 核心抓取逻辑 ==================
 def scrape(tournament):
@@ -105,7 +102,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/MultiTables (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/UnifiedStyle (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -121,7 +118,7 @@ def scrape(tournament):
             "offset": offset
         }
 
-        wait_with_progress(3)
+        wait_simple(3, "Safety delay")
 
         try:
             print(f"      -> Requesting offset {offset}...", end=" ", flush=True)
@@ -130,8 +127,7 @@ def scrape(tournament):
             
             if "error" in data:
                 print("FAILED!", flush=True)
-                print(f"      ⚠️ API RATE LIMIT! Sleeping 60s...", flush=True)
-                wait_with_progress(60)
+                wait_simple(60, "Rate Limit Hit")
                 continue
             
             if "cargoquery" in data:
@@ -175,17 +171,16 @@ def scrape(tournament):
         except:
             dt_obj = datetime.min.replace(tzinfo=timezone.utc)
             
-        # 记录每场比赛的详细信息，用于后续两张表的生成
         valid_matches.append({
             "t1": t1, "t2": t2, "s1": s1, "s2": s2,
             "date": dt_obj, "best_of": m.get("BestOf"),
             "order": match_order,
-            "region": tournament.get("region", "Unknown") # 记录赛区
+            "region": tournament.get("region", "Unknown")
         })
 
     valid_matches.sort(key=lambda x: (x["date"], x["order"]))
 
-    # --- 统计逻辑 (Table 1: 队伍数据) ---
+    # --- 统计逻辑 ---
     for m in valid_matches:
         t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
@@ -220,34 +215,24 @@ def scrape(tournament):
             stats[loser]["streak_losses"] = 1
         else: stats[loser]["streak_losses"] += 1
                 
-    # 返回统计数据 和 原始比赛列表(用于Table 2)
     return stats, valid_matches
 
-# ================== 4. 新增: 时间分布表计算 ==================
+# ================== 4. 时间分布表计算 ==================
 def process_time_stats(all_matches):
-    """
-    计算 [赛区][时间][星期] 的打满数据
-    结构: data[region][hour][weekday] = {'full': 0, 'total': 0}
-    """
-    # 初始化数据结构
-    # hour_keys: LCK=[16, 18], LPL=[15, 17, 19]
     time_data = {
         "LCK": {h: {w: {'full':0, 'total':0} for w in range(8)} for h in [16, 18, 'Total']},
         "LPL": {h: {w: {'full':0, 'total':0} for w in range(8)} for h in [15, 17, 19, 'Total']},
-        "ALL": {w: {'full':0, 'total':0} for w in range(8)} # 合并总计
+        "ALL": {w: {'full':0, 'total':0} for w in range(8)}
     }
-    
-    # 辅助：星期索引 0-6 (Mon-Sun), 7 (Total)
     
     for m in all_matches:
         region = m['region']
         if region not in time_data: continue
         
         dt = m['date']
-        weekday = dt.weekday() # 0=Mon, 6=Sun
+        weekday = dt.weekday()
         hour = dt.hour
         
-        # 判断是否打满
         is_full = False
         s1, s2 = m['s1'], m['s2']
         max_s, min_s = max(s1, s2), min(s1, s2)
@@ -257,35 +242,27 @@ def process_time_stats(all_matches):
             if min_s == 1: is_full = True
         elif bo == "5" or (not bo and max_s == 3):
             if min_s == 2: is_full = True
-        else:
-            continue # 不统计 BO1
+        else: continue
             
-        # 归类时间段 (模糊匹配)
         target_hour = None
         if region == "LCK":
             if hour <= 16: target_hour = 16
-            else: target_hour = 18 # 17:00, 18:00, 19:00 都算第二场
+            else: target_hour = 18
         elif region == "LPL":
             if hour <= 15: target_hour = 15
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
-        # 写入数据
         targets = []
-        if target_hour is not None:
-            targets.append(time_data[region][target_hour]) # 具体时间行
-            
-        targets.append(time_data[region]['Total']) # 赛区总计行
+        if target_hour is not None: targets.append(time_data[region][target_hour])
+        targets.append(time_data[region]['Total'])
         
         for t in targets:
-            # 每日数据
             t[weekday]['total'] += 1
             if is_full: t[weekday]['full'] += 1
-            # 横向总计 (索引7)
             t[7]['total'] += 1
             if is_full: t[7]['full'] += 1
             
-        # 写入 Grand Total
         time_data["ALL"][weekday]['total'] += 1
         if is_full: time_data["ALL"][weekday]['full'] += 1
         time_data["ALL"][7]['total'] += 1
@@ -294,31 +271,23 @@ def process_time_stats(all_matches):
     return time_data
 
 def generate_time_table_html(time_data):
-    """生成时间分布表的 HTML"""
-    weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Total"]
-    rows_config = [
-        ("LCK", 16, "LCK 16:00"),
-        ("LCK", 18, "LCK 18:00"),
-        ("LCK", "Total", "LCK Total"),
-        ("LPL", 15, "LPL 15:00"),
-        ("LPL", 17, "LPL 17:00"),
-        ("LPL", 19, "LPL 19:00"),
-        ("LPL", "Total", "LPL Total"),
-    ]
-    
     html = """
     <div class="wrapper" style="margin-top: 40px;">
-        <div class="table-title">📅 Full Series Distribution (Time in CST)</div>
+        <div class="table-title">📅 Full Series Distribution</div>
         <table id="time-stats">
             <thead>
                 <tr>
                     <th class="team-col">Time Slot</th>
     """
-    for day in weekdays:
+    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Total"]:
         html += f"<th>{day}</th>"
     html += "</tr></thead><tbody>"
     
-    # 渲染各行
+    rows_config = [
+        ("LCK", 16, "LCK 16:00"), ("LCK", 18, "LCK 18:00"), ("LCK", "Total", "LCK Total"),
+        ("LPL", 15, "LPL 15:00"), ("LPL", 17, "LPL 17:00"), ("LPL", 19, "LPL 19:00"), ("LPL", "Total", "LPL Total"),
+    ]
+    
     for region, hour, label in rows_config:
         is_total_row = (hour == "Total")
         row_style = "font-weight:bold; background:#f8fafc;" if is_total_row else ""
@@ -328,29 +297,27 @@ def generate_time_table_html(time_data):
         
         for w in range(8):
             cell = time_data[region][hour][w]
-            total = cell['total']
-            full = cell['full']
+            total, full = cell['total'], cell['full']
             
             if total == 0:
-                html += "<td style='color:#e2e8f0'>-</td>"
+                # [修改] 统一空数据样式
+                html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
             else:
                 ratio = full / total
-                bg_color = color_by_ratio(ratio, reverse=False).replace("48%)", "85%)") # 浅色背景
-                text_color = "black"
-                html += f"<td style='background:{bg_color}; color:{text_color}'>{full} <span style='font-size:11px; opacity:0.7'>({int(ratio*100)}%)</span></td>"
+                bg_color = color_by_ratio(ratio, reverse=True)
+                html += f"<td style='background:{bg_color}; color:white; font-weight:bold'>{full}/{total}</td>"
         html += "</tr>"
         
-    # 渲染 Grand Total
-    html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND TOTAL</td>"
+    html += "<tr style='border-top: 2px solid #cbd5e1; font-weight:800'><td class='team-col'>GRAND</td>"
     for w in range(8):
         cell = time_data["ALL"][w]
-        total = cell['total']
-        full = cell['full']
+        total, full = cell['total'], cell['full']
         if total == 0:
-            html += "<td>-</td>"
+            html += "<td style='background:#f1f5f9; color:#cbd5e1'>-</td>"
         else:
             ratio = full / total
-            html += f"<td>{full} <span style='font-size:11px'>({int(ratio*100)}%)</span></td>"
+            bg_color = color_by_ratio(ratio, reverse=True)
+            html += f"<td style='background:{bg_color}; color:white'>{full}/{total}</td>"
     html += "</tr></tbody></table></div>"
     return html
 
@@ -401,10 +368,7 @@ def save_markdown(tournament, team_stats):
 
 def build(all_data, all_matches_global):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
-    
-    # 计算时间分布数据
-    time_stats = process_time_stats(all_matches_global)
-    time_table_html = generate_time_table_html(time_stats)
+    time_table_html = generate_time_table_html(process_time_stats(all_matches_global))
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -444,7 +408,6 @@ def build(all_data, all_matches_global):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # --- 渲染原有的赛事表 ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -510,7 +473,6 @@ def build(all_data, all_matches_global):
                 </tr>"""
         html += "</tbody></table></div>"
 
-    # --- 渲染新的时间分布表 ---
     html += time_table_html
 
     html += f"""
@@ -587,20 +549,18 @@ def build(all_data, all_matches_global):
     print(f"✓ Generated: {INDEX_FILE}", flush=True)
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper (MultiTables)...", flush=True)
+    print("Starting LoL Stats Scraper (MultiTables/Clean)...", flush=True)
     data = {}
-    all_matches_global = [] # 存储所有赛事的比赛，用于时间统计
+    all_matches_global = [] 
     
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
-        # 获取 team_stats 和 raw_matches
         team_stats, matches = scrape(tournament)
         
         data[tournament["slug"]] = team_stats
-        all_matches_global.extend(matches) # 收集原始比赛数据
+        all_matches_global.extend(matches) 
         
         save_markdown(tournament, team_stats)
     
-    # 传入原始数据生成最终 HTML
     build(data, all_matches_global)
     print("\n✅ All done!", flush=True)
