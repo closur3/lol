@@ -1,7 +1,7 @@
 # 2026 LCK Cup
 
 **Source:** [Leaguepedia](https://lol.fandom.com/wiki/LCK/2026_Season/Cup)  
-**Updated:** 2026-01-29 01:03:16 CST
+**Updated:** 2026-01-29 01:12:10 CST
 
 ---
 
