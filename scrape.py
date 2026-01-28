@@ -6,7 +6,29 @@ from datetime import datetime, timezone, timedelta
 import time
 import sys
 
-# ================== 1. 核心配置 ==================
+# ================== 0. 全局常量 (移到最上方防止报错) ==================
+# 表格列索引 (Python 和 JS 共用)
+COL_TEAM = 0
+COL_BO3 = 1
+COL_BO3_PCT = 2
+COL_BO5 = 3
+COL_BO5_PCT = 4
+COL_SERIES = 5
+COL_SERIES_WR = 6
+COL_GAME = 7
+COL_GAME_WR = 8
+COL_STREAK = 9
+COL_LAST_DATE = 10
+
+INDEX_FILE = Path("index.html")
+TEAMS_JSON = Path("teams.json")
+TOURNAMENT_DIR = Path("tournament")
+GITHUB_REPO = "https://github.com/closur3/lol"
+
+TOURNAMENT_DIR.mkdir(exist_ok=True)
+CST = timezone(timedelta(hours=8)) # 北京时间
+
+# ================== 1. 赛事配置 ==================
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
@@ -21,14 +43,6 @@ TOURNAMENTS = [
         "region": "LPL"
     },
 ]
-
-INDEX_FILE = Path("index.html")
-TEAMS_JSON = Path("teams.json")
-TOURNAMENT_DIR = Path("tournament")
-GITHUB_REPO = "https://github.com/closur3/lol"
-
-TOURNAMENT_DIR.mkdir(exist_ok=True)
-CST = timezone(timedelta(hours=8)) 
 
 # ================== 2. 辅助工具 ==================
 def load_team_map():
@@ -89,7 +103,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/SimpleArchive (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/ErrorFix (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -241,7 +255,7 @@ def process_time_stats(all_matches):
             elif hour <= 17: target_hour = 17
             else: target_hour = 19
             
-        # HTML 交互数据 (Markdown 不用)
+        # 简化版 Match String 用于 HTML (带标签)
         match_str_html = f"<span class='date'>{dt.strftime('%m-%d')}</span> <span class='{'full-match' if is_full else ''}'>{m['t1']} vs {m['t2']} <b>{s1}-{s2}</b></span>"
         
         targets = []
@@ -249,14 +263,17 @@ def process_time_stats(all_matches):
         targets.append(time_data[region]['Total'])
         
         for t in targets:
-            t[weekday]['total'] += 1
+            # HTML 专用
             t[weekday]['matches'].append(match_str_html)
-            if is_full: t[weekday]['full'] += 1
-            # Grand Total Logic
-            t[7]['total'] += 1
             t[7]['matches'].append(match_str_html)
-            if is_full: t[7]['full'] += 1
+            # 数据统计
+            t[weekday]['total'] += 1
+            t[7]['total'] += 1
+            if is_full: 
+                t[weekday]['full'] += 1
+                t[7]['full'] += 1
             
+        # Grand Total
         time_data["ALL"][weekday]['total'] += 1
         time_data["ALL"][weekday]['matches'].append(match_str_html)
         if is_full: time_data["ALL"][weekday]['full'] += 1
@@ -276,7 +293,6 @@ def generate_markdown_time_table(time_data):
     md += "| Time Slot | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Total |\n"
     md += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
     
-    # 不做赛区过滤，全部展示
     rows_config = [
         ("LCK", 16, "LCK 16:00"), 
         ("LCK", 18, "LCK 18:00"), 
@@ -285,7 +301,7 @@ def generate_markdown_time_table(time_data):
         ("LPL", 17, "LPL 17:00"), 
         ("LPL", 19, "LPL 19:00"), 
         ("LPL", "Total", "**LPL Total**"),
-        ("ALL", "Grand", "**GRAND**") # ALL 结构特殊，需单独处理 key
+        ("ALL", "Grand", "**GRAND**")
     ]
 
     for region, h_key, label in rows_config:
@@ -293,7 +309,7 @@ def generate_markdown_time_table(time_data):
         for w in range(8): # 0-7
             # 获取单元格数据
             if region == "ALL":
-                cell = time_data["ALL"][w] # ALL 直接在最外层
+                cell = time_data["ALL"][w]
             else:
                 cell = time_data[region][h_key][w]
                 
@@ -424,8 +440,8 @@ def generate_time_table_html(time_data):
 
 def build(all_data, all_matches_global):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
+    time_table_html = generate_time_table_html(process_time_stats(all_matches_global))
     
-    # HTML 主体部分
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -475,7 +491,7 @@ def build(all_data, all_matches_global):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # 循环生成每个赛事的主表
+    # --- 渲染原有的赛事表 ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -541,8 +557,7 @@ def build(all_data, all_matches_global):
                 </tr>"""
         html += "</tbody></table></div>"
 
-    # 生成 HTML 的时间分布表
-    html += generate_time_table_html(process_time_stats(all_matches_global))
+    html += time_table_html
 
     html += f"""
     <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
