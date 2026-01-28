@@ -4,7 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
-import sys # 引入 sys 用于强制刷新 stdout
+import sys
 
 # ================== 配置 ==================
 TOURNAMENTS = [
@@ -85,13 +85,15 @@ def color_by_date(date, all_dates):
 # ---------- 进度条辅助函数 ----------
 def wait_with_countdown(seconds):
     """显示倒计时，证明程序没死机"""
-    print(f"      ⏳ Safety cooldown: ", end="", flush=True)
+    print(f"      ⏳ Cooling down: ", end="", flush=True)
+    # 简单的进度条
     for i in range(seconds, 0, -1):
-        print(f"{i}..", end="", flush=True)
+        if i % 5 == 0 or i < 5: # 每5秒或最后几秒显示
+            print(f"{i}..", end="", flush=True)
         time.sleep(1)
     print("Go!", flush=True)
 
-# ---------- 抓取逻辑 (双轨制 + 实时日志) ----------
+# ---------- 抓取逻辑 (防卡死版) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -105,7 +107,7 @@ def scrape(tournament):
 
     api_url = "https://lol.fandom.com/api.php"
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/LiveLog (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/AntiStuck (https://github.com/closur3/lol)'})
 
     # ==========================================
     # 阶段 1: 抓取 MatchSchedule
@@ -123,8 +125,7 @@ def scrape(tournament):
             "order_by": "DateTime_UTC ASC", "limit": limit, "offset": offset
         }
         
-        # 请求前倒计时
-        wait_with_countdown(3) 
+        wait_with_countdown(3) # 基础等待
         
         try:
             print(f"      -> Requesting offset {offset}...", end=" ", flush=True)
@@ -133,8 +134,8 @@ def scrape(tournament):
             
             if "error" in data:
                 print("FAILED!", flush=True)
-                print(f"      ⚠️ API RATE LIMIT! Sleeping 45s...", flush=True)
-                wait_with_countdown(45)
+                print(f"      ⚠️ API RATE LIMIT! Sleeping 70s to reset quota...", flush=True)
+                wait_with_countdown(70) # 延长到70秒，确保封禁解除
                 continue
             
             if "cargoquery" in data:
@@ -171,6 +172,30 @@ def scrape(tournament):
         max_s, min_s = max(s1, s2), min(s1, s2)
         best_of = m.get("BestOf")
         
+        # [Backup Calculation]
+        # 我们在这里也计算胜负场和Streak，以防Phase 2失败。
+        # 如果Phase 2成功，这些值会被覆盖；如果失败，至少有这些值兜底。
+        winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
+        
+        # 更新基础胜负 (Backup)
+        stats[winner]["series_wins"] += 1
+        stats[t1]["series_total"] += 1
+        stats[t2]["series_total"] += 1
+        stats[t1]["game_wins"] += s1
+        stats[t2]["game_wins"] += s2
+        stats[t1]["game_total"] += (s1 + s2)
+        stats[t2]["game_total"] += (s1 + s2)
+        
+        # 更新 Streak (Backup)
+        if stats[winner]["streak_losses"] > 0:
+            stats[winner]["streak_losses"] = 0
+            stats[winner]["streak_wins"] = 1
+        else: stats[winner]["streak_wins"] += 1
+        if stats[loser]["streak_wins"] > 0:
+            stats[loser]["streak_wins"] = 0
+            stats[loser]["streak_losses"] = 1
+        else: stats[loser]["streak_losses"] += 1
+
         for team in (t1, t2):
             if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]):
                 stats[team]["last_date"] = series_date
@@ -186,9 +211,15 @@ def scrape(tournament):
     # 阶段 2: 抓取 Standings
     # ==========================================
     print(f"   [Phase 2] Fetching Official Standings...", flush=True)
-    standings_data = []
+    # [核心修改] 增加阶段间隙，防止连续请求触发封禁
+    print(f"      ☕ Taking a 10s break before asking for Standings...", flush=True)
+    wait_with_countdown(10)
     
-    while True:
+    standings_data = []
+    standings_retry = 0
+    standings_success = False
+    
+    while standings_retry < 3: # 最多重试3次，不行就跳过
         params = {
             "action": "cargoquery", "format": "json", "tables": "Standings",
             "fields": "Team, Win, Loss, GameWin, GameLoss, Streak, StreakDirection",
@@ -196,61 +227,65 @@ def scrape(tournament):
             "limit": 500
         }
         
-        wait_with_countdown(3)
-        
         try:
-            print(f"      -> Requesting standings...", end=" ", flush=True)
+            print(f"      -> Requesting standings (Attempt {standings_retry+1}/3)...", end=" ", flush=True)
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
                 print("FAILED!", flush=True)
-                print(f"      ⚠️ API RATE LIMIT! Sleeping 45s...", flush=True)
-                wait_with_countdown(45)
+                print(f"      ⚠️ API RATE LIMIT! Sleeping 70s...", flush=True)
+                wait_with_countdown(70)
+                standings_retry += 1
                 continue
 
             if "cargoquery" in data:
                 standings_data = [item["title"] for item in data["cargoquery"]]
                 print(f"OK! Got {len(standings_data)} records.", flush=True)
+                standings_success = True
                 break 
             else:
-                print("Empty.", flush=True)
+                print("Empty response.", flush=True)
                 break
         except Exception as e:
-            print(f"\n      ❌ Standings Fetch Error: {e}", flush=True)
-            break
-
-    # 处理 Standings 数据
-    print(f"   ... Merging official stats...", flush=True)
-    for row in standings_data:
-        team_name = get_short_name(row.get("Team", ""))
-        if not team_name: continue
-        
-        try:
-            w = int(row.get("Win", 0))
-            l = int(row.get("Loss", 0))
-            stats[team_name]["series_wins"] = w
-            stats[team_name]["series_total"] = w + l
-        except: pass
-
-        try:
-            gw = int(row.get("GameWin", 0))
-            gl = int(row.get("GameLoss", 0))
-            stats[team_name]["game_wins"] = gw
-            stats[team_name]["game_total"] = gw + gl
-        except: pass
-
-        try:
-            s_val = int(row.get("Streak", 0))
-            s_dir = row.get("StreakDirection", "") 
+            print(f"\n      ❌ Error: {e}", flush=True)
+            standings_retry += 1
+            time.sleep(5)
             
-            if s_dir == "Win":
-                stats[team_name]["streak_wins"] = s_val
-                stats[team_name]["streak_losses"] = 0
-            elif s_dir == "Loss":
-                stats[team_name]["streak_wins"] = 0
-                stats[team_name]["streak_losses"] = s_val
-        except: pass
+    if not standings_success:
+        print("      ⚠️ Skipping Standings (Using calculated stats from Phase 1 instead).", flush=True)
+    else:
+        # 处理 Standings 数据 (覆盖 Phase 1 的计算值)
+        print(f"   ... Overwriting with OFFICIAL stats...", flush=True)
+        for row in standings_data:
+            team_name = get_short_name(row.get("Team", ""))
+            if not team_name: continue
+            
+            try:
+                w = int(row.get("Win", 0))
+                l = int(row.get("Loss", 0))
+                stats[team_name]["series_wins"] = w
+                stats[team_name]["series_total"] = w + l
+            except: pass
+
+            try:
+                gw = int(row.get("GameWin", 0))
+                gl = int(row.get("GameLoss", 0))
+                stats[team_name]["game_wins"] = gw
+                stats[team_name]["game_total"] = gw + gl
+            except: pass
+
+            try:
+                s_val = int(row.get("Streak", 0))
+                s_dir = row.get("StreakDirection", "") 
+                
+                if s_dir == "Win":
+                    stats[team_name]["streak_wins"] = s_val
+                    stats[team_name]["streak_losses"] = 0
+                elif s_dir == "Loss":
+                    stats[team_name]["streak_wins"] = 0
+                    stats[team_name]["streak_losses"] = s_val
+            except: pass
 
     return stats
 
