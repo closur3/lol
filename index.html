@@ -1,428 +1,451 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoL Insights Pro</title>
     <style>
-        :root { --bg-gray: #f1f5f9; --text-muted: #94a3b8; --primary: #2563eb; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg-gray); margin: 0; padding: 10px; color: #1e293b; }
-        .main-header { text-align: center; padding: 30px 0; }
-        .main-header h1 { margin: 0; font-size: 2rem; font-weight: 800; color: #0f172a; letter-spacing: -0.025em; }
-        
-        .wrapper { background: #fff; border-radius: 12px; overflow: hidden; margin-bottom: 30px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        
-        .table-title-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #fff; border-bottom: 1px solid #f1f5f9; }
-        .table-title-bar .title { font-size: 1.1rem; font-weight: 700; color: #334155; }
-        .table-title-bar .links { font-size: 0.85rem; }
-        .table-title-bar a { color: var(--primary); text-decoration: none; margin-left: 15px; font-weight: 500; border-bottom: 1px solid transparent; transition: 0.2s; }
-        .table-title-bar a:hover { border-bottom-color: var(--primary); }
-
-        table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
-        th { background: #f8fafc; padding: 12px 8px; cursor: pointer; border-bottom: 2px solid #f1f5f9; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 11px; }
-        th:hover { background: #f1f5f9; color: var(--primary); }
-        td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #f8fafc; }
-
-        /* 宽度分配优化 */
-        .col-team { width: 120px; position: sticky; left: 0; background: white !important; font-weight: 800; border-right: 2px solid #f1f5f9; text-align: left; padding-left: 15px; }
-        .col-data-sm { width: 55px; }  /* 计数列 */
-        .col-data-md { width: 75px; }  /* 百分比列 */
-        .col-streak { width: 70px; }
-        .col-date { width: 100px; }
-
-        .badge { color: white; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; display: inline-block; min-width: 24px; }
-        .footer { text-align: center; color: var(--text-muted); font-size: 12px; margin: 40px; }
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 10px; }
+        .main-header { text-align: center; padding: 25px 0; }
+        .main-header h1 { margin: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .wrapper { width: 100%; overflow-x: auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }
+        .table-title { padding: 15px; font-weight: 700; border-bottom: 1px solid #f1f5f9; }
+        .table-title a { color: #2563eb; text-decoration: none; }
+        table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+        th { background: #f8fafc; padding: 14px 8px; font-weight: 600; color: #64748b; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }
+        th:hover { background: #eff6ff; color: #2563eb; }
+        td { padding: 12px 8px; text-align: center; border-bottom: 1px solid #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-col { position: sticky; left: 0; background: white !important; z-index: 10; border-right: 2px solid #f1f5f9; text-align: left; font-weight: 800; padding-left: 15px; width: 80px; }
+        .col-bo3 { width: 70px; }
+        .col-bo3-pct { width: 85px; }
+        .col-bo5 { width: 70px; }
+        .col-bo5-pct { width: 85px; }
+        .col-series { width: 80px; }
+        .col-series-wr { width: 100px; }
+        .col-game { width: 80px; }
+        .col-game-wr { width: 100px; }
+        .col-streak { width: 80px; }
+        .col-last { width: 120px; }
+        .badge { color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }
+        .footer { text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }
     </style>
 </head>
 <body>
     <header class="main-header"><h1>🏆 LoL Insights Pro</h1></header>
-    <div style="max-width:1300px; margin:0 auto">
+    <div style="max-width:1400px; margin:0 auto">
         <div class="wrapper">
-            <div class="table-title-bar">
-                <div class="title">2026 LCK Cup</div>
-                <div class="links">
-                    <a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/" target="_blank">↗ Gol.gg Data</a>
-                    <a href="https://github.com/closur3/lol" target="_blank">↗ Source Code</a>
-                </div>
-            </div>
+            <div class="table-title"><a href="https://gol.gg/tournament/tournament-matchlist/LCK%20Cup%202026/" target="_blank">2026 LCK Cup</a></div>
             <table id="t0">
                 <thead>
                     <tr>
-                        <th class="col-team" onclick="doSort(0, 't0')">Team</th>
-                        <th class="col-data-sm" onclick="doSort(2, 't0')">BO3-F</th>
-                        <th class="col-data-md" onclick="doSort(2, 't0')">Fullrate</th>
-                        <th class="col-data-sm" onclick="doSort(4, 't0')">BO5-F</th>
-                        <th class="col-data-md" onclick="doSort(4, 't0')">Fullrate</th>
-                        <th class="col-data-sm" onclick="doSort(6, 't0')">S-Win</th>
-                        <th class="col-data-md" onclick="doSort(6, 't0')">Series</th>
-                        <th class="col-data-sm" onclick="doSort(8, 't0')">G-Win</th>
-                        <th class="col-data-md" onclick="doSort(8, 't0')">Games</th>
+                        <th class="team-col" onclick="doSort(0, 't0')">Team</th>
+                        <th colspan="2" onclick="doSort(2, 't0')" style="text-align:center;">BO3 Fullrate</th>
+                        <th colspan="2" onclick="doSort(4, 't0')" style="text-align:center;">BO5 Fullrate</th>
+                        <th colspan="2" onclick="doSort(6, 't0')" style="text-align:center;">Series</th>
+                        <th colspan="2" onclick="doSort(8, 't0')" style="text-align:center;">Games</th>
                         <th class="col-streak" onclick="doSort(9, 't0')">Streak</th>
-                        <th class="col-date" onclick="doSort(10, 't0')">Last Date</th>
+                        <th class="col-last" onclick="doSort(10, 't0')">Last Date</th>
                     </tr>
                 </thead>
                 <tbody>
                 <tr>
-                    <td class="col-team">GEN</td>
-                    <td >0/4</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">0.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-0</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
-                    <td >8-0</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>4W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-24</td>
+                    <td class="team-col">GEN</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">0/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">0.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-0</td>
+                    <td class="col-series-wr" style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">8-0</td>
+                    <td class="col-game-wr" style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>4W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 36%, 52%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
-                    <td class="col-team">DK</td>
-                    <td >1/4</td>
-                    <td style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">25.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >3-1</td>
-                    <td style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td >6-3</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-24</td>
+                    <td class="team-col">DK</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">1/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">3-1</td>
+                    <td class="col-series-wr" style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">6-3</td>
+                    <td class="col-game-wr" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 36%, 52%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
-                    <td class="col-team">KT</td>
-                    <td >2/4</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-2</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td >4-6</td>
-                    <td style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-25</td>
+                    <td class="team-col">KT</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">2/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-2</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">4-6</td>
+                    <td class="col-game-wr" style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>1W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 52%, 49%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
-                    <td class="col-team">BFX</td>
-                    <td >2/4</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-2</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td >5-5</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-25</td>
+                    <td class="team-col">BFX</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">2/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-2</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-5</td>
+                    <td class="col-game-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>2L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 52%, 49%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
-                    <td class="col-team">NS</td>
-                    <td >2/4</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-3</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
-                    <td >4-6</td>
-                    <td style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-23</td>
+                    <td class="team-col">NS</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">2/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-3</td>
+                    <td class="col-series-wr" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">4-6</td>
+                    <td class="col-game-wr" style="background:hsl(56, 65%, 48%);color:white;font-weight:bold">40.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>2L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
-                    <td class="col-team">BRO</td>
-                    <td >3/4</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >0-4</td>
-                    <td style="background:hsl(0, 65%, 48%);color:white;font-weight:bold">0.0%</td>
-                    <td >3-8</td>
-                    <td style="background:hsl(38, 65%, 48%);color:white;font-weight:bold">27.3%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>4L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-25</td>
+                    <td class="team-col">T1</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-0</td>
+                    <td class="col-series-wr" style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">8-3</td>
+                    <td class="col-game-wr" style="background:hsl(101, 65%, 48%);color:white;font-weight:bold">72.7%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>4W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 52%, 49%);font-weight:700">2026-01-25</td>
                 </tr>
                 <tr>
-                    <td class="col-team">T1</td>
-                    <td >3/4</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-0</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
-                    <td >8-3</td>
-                    <td style="background:hsl(101, 65%, 48%);color:white;font-weight:bold">72.7%</td>
-                    <td ><span class='badge' style='background:#10b981'>4W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-25</td>
+                    <td class="team-col">HLE</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-2</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-6</td>
+                    <td class="col-game-wr" style="background:hsl(63, 65%, 48%);color:white;font-weight:bold">45.5%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>2W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 36%, 52%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
-                    <td class="col-team">DNS</td>
-                    <td >3/4</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-3</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
-                    <td >4-7</td>
-                    <td style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">36.4%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-24</td>
+                    <td class="team-col">DNS</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-3</td>
+                    <td class="col-series-wr" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">4-7</td>
+                    <td class="col-game-wr" style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">36.4%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 36%, 52%);font-weight:700">2026-01-24</td>
                 </tr>
                 <tr>
-                    <td class="col-team">HLE</td>
-                    <td >3/4</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-2</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td >5-6</td>
-                    <td style="background:hsl(63, 65%, 48%);color:white;font-weight:bold">45.5%</td>
-                    <td ><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-24</td>
+                    <td class="team-col">DRX</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/5</td>
+                    <td class="col-bo3-pct" style="background:hsl(27, 65%, 48%);color:white;font-weight:bold">80.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-4</td>
+                    <td class="col-series-wr" style="background:hsl(28, 65%, 48%);color:white;font-weight:bold">20.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-9</td>
+                    <td class="col-game-wr" style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">35.7%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr>
                 <tr>
-                    <td class="col-team">DRX</td>
-                    <td >3/4</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-3</td>
-                    <td style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
-                    <td >4-7</td>
-                    <td style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">36.4%</td>
-                    <td ><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-23</td>
+                    <td class="team-col">BRO</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/5</td>
+                    <td class="col-bo3-pct" style="background:hsl(27, 65%, 48%);color:white;font-weight:bold">80.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-4</td>
+                    <td class="col-series-wr" style="background:hsl(28, 65%, 48%);color:white;font-weight:bold">20.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-9</td>
+                    <td class="col-game-wr" style="background:hsl(50, 65%, 48%);color:white;font-weight:bold">35.7%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>1W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr></tbody></table></div>
         <div class="wrapper">
-            <div class="table-title-bar">
-                <div class="title">2026 LPL Split 1</div>
-                <div class="links">
-                    <a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/" target="_blank">↗ Gol.gg Data</a>
-                    <a href="https://github.com/closur3/lol" target="_blank">↗ Source Code</a>
-                </div>
-            </div>
+            <div class="table-title"><a href="https://gol.gg/tournament/tournament-matchlist/LPL%202026%20Split%201/" target="_blank">2026 LPL Split 1</a></div>
             <table id="t1">
                 <thead>
                     <tr>
-                        <th class="col-team" onclick="doSort(0, 't1')">Team</th>
-                        <th class="col-data-sm" onclick="doSort(2, 't1')">BO3-F</th>
-                        <th class="col-data-md" onclick="doSort(2, 't1')">Fullrate</th>
-                        <th class="col-data-sm" onclick="doSort(4, 't1')">BO5-F</th>
-                        <th class="col-data-md" onclick="doSort(4, 't1')">Fullrate</th>
-                        <th class="col-data-sm" onclick="doSort(6, 't1')">S-Win</th>
-                        <th class="col-data-md" onclick="doSort(6, 't1')">Series</th>
-                        <th class="col-data-sm" onclick="doSort(8, 't1')">G-Win</th>
-                        <th class="col-data-md" onclick="doSort(8, 't1')">Games</th>
+                        <th class="team-col" onclick="doSort(0, 't1')">Team</th>
+                        <th colspan="2" onclick="doSort(2, 't1')" style="text-align:center;">BO3 Fullrate</th>
+                        <th colspan="2" onclick="doSort(4, 't1')" style="text-align:center;">BO5 Fullrate</th>
+                        <th colspan="2" onclick="doSort(6, 't1')" style="text-align:center;">Series</th>
+                        <th colspan="2" onclick="doSort(8, 't1')" style="text-align:center;">Games</th>
                         <th class="col-streak" onclick="doSort(9, 't1')">Streak</th>
-                        <th class="col-date" onclick="doSort(10, 't1')">Last Date</th>
+                        <th class="col-last" onclick="doSort(10, 't1')">Last Date</th>
                     </tr>
                 </thead>
                 <tbody>
                 <tr>
-                    <td class="col-team">UP</td>
-                    <td >0/3</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">0.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-2</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td >2-4</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">UP</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">1/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-3</td>
+                    <td class="col-series-wr" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">3-6</td>
+                    <td class="col-game-wr" style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>2L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr>
                 <tr>
-                    <td class="col-team">TT</td>
-                    <td >1/4</td>
-                    <td style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">25.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >0-4</td>
-                    <td style="background:hsl(0, 65%, 48%);color:white;font-weight:bold">0.0%</td>
-                    <td >1-8</td>
-                    <td style="background:hsl(15, 65%, 48%);color:white;font-weight:bold">11.1%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>4L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-26</td>
+                    <td class="team-col">TT</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">1/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">0-4</td>
+                    <td class="col-series-wr" style="background:hsl(0, 65%, 48%);color:white;font-weight:bold">0.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">1-8</td>
+                    <td class="col-game-wr" style="background:hsl(15, 65%, 48%);color:white;font-weight:bold">11.1%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>4L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 68%, 46%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
-                    <td class="col-team">LNG</td>
-                    <td >1/3</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >3-0</td>
-                    <td style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
-                    <td >6-1</td>
-                    <td style="background:hsl(120, 65%, 48%);color:white;font-weight:bold">85.7%</td>
-                    <td ><span class='badge' style='background:#10b981'>3W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">LNG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">1/3</td>
+                    <td class="col-bo3-pct" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">33.3%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-0</td>
+                    <td class="col-series-wr" style="background:hsl(140, 65%, 48%);color:white;font-weight:bold">100.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">7-1</td>
+                    <td class="col-game-wr" style="background:hsl(122, 65%, 48%);color:white;font-weight:bold">87.5%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>4W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr>
                 <tr>
-                    <td class="col-team">OMG</td>
-                    <td >1/3</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-2</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td >2-5</td>
-                    <td style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
-                    <td ><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-23</td>
+                    <td class="team-col">OMG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">1/3</td>
+                    <td class="col-bo3-pct" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">33.3%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">1-3</td>
+                    <td class="col-series-wr" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">2-6</td>
+                    <td class="col-game-wr" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">25.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr>
                 <tr>
-                    <td class="col-team">WE</td>
-                    <td >2/5</td>
-                    <td style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">40.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-1</td>
-                    <td style="background:hsl(112, 65%, 48%);color:white;font-weight:bold">80.0%</td>
-                    <td >9-3</td>
-                    <td style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">75.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-26</td>
+                    <td class="team-col">WE</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">2/5</td>
+                    <td class="col-bo3-pct" style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">40.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-1</td>
+                    <td class="col-series-wr" style="background:hsl(112, 65%, 48%);color:white;font-weight:bold">80.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">9-3</td>
+                    <td class="col-game-wr" style="background:hsl(105, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>2W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 68%, 46%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
-                    <td class="col-team">JDG</td>
-                    <td >3/6</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-2</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td >9-6</td>
-                    <td style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>1W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-26</td>
+                    <td class="team-col">JDG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/6</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-2</td>
+                    <td class="col-series-wr" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">9-6</td>
+                    <td class="col-game-wr" style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>1W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 68%, 46%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
-                    <td class="col-team">BLG</td>
-                    <td >3/6</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-2</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td >9-6</td>
-                    <td style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-26</td>
+                    <td class="team-col">BLG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/6</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-2</td>
+                    <td class="col-series-wr" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">9-6</td>
+                    <td class="col-game-wr" style="background:hsl(84, 65%, 48%);color:white;font-weight:bold">60.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>2L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 68%, 46%);font-weight:700">2026-01-26</td>
                 </tr>
                 <tr>
-                    <td class="col-team">EDG</td>
-                    <td >2/4</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-2</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td >5-5</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-23</td>
+                    <td class="team-col">EDG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">2/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-2</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-5</td>
+                    <td class="col-game-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>2W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 20%, 55%);font-weight:700">2026-01-23</td>
                 </tr>
                 <tr>
-                    <td class="col-team">IG</td>
-                    <td >4/7</td>
-                    <td style="background:hsl(60, 65%, 48%);color:white;font-weight:bold">57.1%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-5</td>
-                    <td style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
-                    <td >6-12</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">IG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/7</td>
+                    <td class="col-bo3-pct" style="background:hsl(60, 65%, 48%);color:white;font-weight:bold">57.1%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-5</td>
+                    <td class="col-series-wr" style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">6-12</td>
+                    <td class="col-game-wr" style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>2L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 84%, 43%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
-                    <td class="col-team">TES</td>
-                    <td >4/7</td>
-                    <td style="background:hsl(60, 65%, 48%);color:white;font-weight:bold">57.1%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-5</td>
-                    <td style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
-                    <td >7-11</td>
-                    <td style="background:hsl(54, 65%, 48%);color:white;font-weight:bold">38.9%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">TES</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/7</td>
+                    <td class="col-bo3-pct" style="background:hsl(60, 65%, 48%);color:white;font-weight:bold">57.1%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-5</td>
+                    <td class="col-series-wr" style="background:hsl(40, 65%, 48%);color:white;font-weight:bold">28.6%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">7-11</td>
+                    <td class="col-game-wr" style="background:hsl(54, 65%, 48%);color:white;font-weight:bold">38.9%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 84%, 43%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
-                    <td class="col-team">AL</td>
-                    <td >4/6</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >4-2</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td >10-6</td>
-                    <td style="background:hsl(87, 65%, 48%);color:white;font-weight:bold">62.5%</td>
-                    <td ><span class='badge' style='background:#10b981'>3W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">AL</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/6</td>
+                    <td class="col-bo3-pct" style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">4-2</td>
+                    <td class="col-series-wr" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">10-6</td>
+                    <td class="col-game-wr" style="background:hsl(87, 65%, 48%);color:white;font-weight:bold">62.5%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>3W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 84%, 43%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
-                    <td class="col-team">WBG</td>
-                    <td >4/6</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >3-3</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td >8-8</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td ><span class='badge' style='background:#10b981'>2W</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-27</td>
+                    <td class="team-col">WBG</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">4/6</td>
+                    <td class="col-bo3-pct" style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">3-3</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">8-8</td>
+                    <td class="col-game-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>2W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 84%, 43%);font-weight:700">2026-01-27</td>
                 </tr>
                 <tr>
-                    <td class="col-team">LGD</td>
-                    <td >2/3</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >1-2</td>
-                    <td style="background:hsl(46, 65%, 48%);color:white;font-weight:bold">33.3%</td>
-                    <td >4-4</td>
-                    <td style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>2L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-23</td>
+                    <td class="team-col">LGD</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/4</td>
+                    <td class="col-bo3-pct" style="background:hsl(35, 65%, 48%);color:white;font-weight:bold">75.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-2</td>
+                    <td class="col-series-wr" style="background:hsl(70, 65%, 48%);color:white;font-weight:bold">50.0%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">6-5</td>
+                    <td class="col-game-wr" style="background:hsl(76, 65%, 48%);color:white;font-weight:bold">54.5%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#10b981'>1W</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 100%, 40%);font-weight:700">2026-01-28</td>
                 </tr>
                 <tr>
-                    <td class="col-team">NIP</td>
-                    <td >3/3</td>
-                    <td style="background:hsl(0, 65%, 48%);color:white;font-weight:bold">100.0%</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td style="background:#f1f5f9;color:#cbd5e1">-</td>
-                    <td >2-1</td>
-                    <td style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
-                    <td >5-4</td>
-                    <td style="background:hsl(77, 65%, 48%);color:white;font-weight:bold">55.6%</td>
-                    <td ><span class='badge' style='background:#f43f5e'>1L</span></td>
-                    <td  style="color:#64748b;font-weight:700">2026-01-25</td>
+                    <td class="team-col">NIP</td>
+                    <td class="col-bo3" style="background:transparent;color:inherit">3/3</td>
+                    <td class="col-bo3-pct" style="background:hsl(0, 65%, 48%);color:white;font-weight:bold">100.0%</td>
+                    <td class="col-bo5" style="background:#f1f5f9;color:#cbd5e1">-</td>
+                    <td class="col-bo5-pct" style="background:#f1f5f9;color:#cbd5e1;font-weight:bold">-</td>
+                    <td class="col-series" style="background:transparent;color:inherit">2-1</td>
+                    <td class="col-series-wr" style="background:hsl(93, 65%, 48%);color:white;font-weight:bold">66.7%</td>
+                    <td class="col-game" style="background:transparent;color:inherit">5-4</td>
+                    <td class="col-game-wr" style="background:hsl(77, 65%, 48%);color:white;font-weight:bold">55.6%</td>
+                    <td class="col-streak" style="background:transparent;color:inherit"><span class='badge' style='background:#f43f5e'>1L</span></td>
+                    <td class="col-last" style="background:transparent;color:hsl(215, 52%, 49%);font-weight:700">2026-01-25</td>
                 </tr></tbody></table></div>
-    <div class="footer">Last Update: 2026-01-28 04:31:37 CST</div>
+    <div class="footer">Updated: 2026-01-28 19:00:07 CST | <a href="https://github.com/closur3/lol" target="_blank">GitHub</a></div>
     </div>
     <script>
-    function parseValue(v) {
-        if (!v || v === "-") return -1000;
-        if (v.includes("%")) return parseFloat(v);
-        if (v.includes("/")) { let p = v.split("/"); return parseFloat(p[0])/(parseFloat(p[1])||1); }
-        if (v.includes("-") && v.split("-").length === 2) return parseFloat(v.split("-")[0]);
-        if (v.includes("W")) return 100 + parseFloat(v);
-        if (v.includes("L")) return -100 - parseFloat(v);
-        let d = Date.parse(v); if (!isNaN(d)) return d;
-        return v.toLowerCase();
-    }
-    function doSort(col, id) {
-        const table = document.getElementById(id);
-        const tbody = table.tBodies[0];
-        const rows = Array.from(tbody.rows);
-        const currDir = table.getAttribute('data-dir-' + col) || 'desc';
-        const nextDir = currDir === 'desc' ? 'asc' : 'desc';
-        rows.sort((a, b) => {
-            let va = parseValue(a.cells[col].innerText), vb = parseValue(b.cells[col].innerText);
-            return nextDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-        });
-        rows.forEach(r => tbody.appendChild(r));
-        table.setAttribute('data-dir-' + col, nextDir);
-    }
+        // 列索引常量
+        const COL_TEAM = 0;
+        const COL_SERIES_WR = 6;
+        const COL_GAME_WR = 8;
+        const COL_LAST_DATE = 10;
+        
+        function doSort(columnIndex, tableId) {
+            const table = document.getElementById(tableId);
+            const tbody = table.tBodies[0];
+            const rows = Array.from(tbody.rows);
+            const stateKey = 'data-sort-dir-' + columnIndex;
+            const currentDir = table.getAttribute(stateKey);
+            
+            let nextDir;
+            if (!currentDir) {
+                nextDir = (columnIndex === COL_TEAM) ? 'asc' : 'desc';
+            } else {
+                nextDir = currentDir === 'desc' ? 'asc' : 'desc';
+            }
+            
+            rows.sort((rowA, rowB) => {
+                let valueA = rowA.cells[columnIndex].innerText;
+                let valueB = rowB.cells[columnIndex].innerText;
+                
+                // 特殊处理日期列
+                if (columnIndex === COL_LAST_DATE) { 
+                    valueA = valueA === "-" ? 0 : new Date(valueA).getTime(); 
+                    valueB = valueB === "-" ? 0 : new Date(valueB).getTime(); 
+                } else { 
+                    valueA = parseValue(valueA);
+                    valueB = parseValue(valueB); 
+                }
+                
+                // 主排序
+                if (valueA !== valueB) {
+                    return nextDir === 'asc' ? (valueA > valueB ? 1 : -1) : (valueA < valueB ? 1 : -1);
+                }
+                
+                // 次级排序：当点击Series WR且数据相同时，按Game WR排序
+                if (columnIndex === COL_SERIES_WR) {
+                    let gameWrA = parseValue(rowA.cells[COL_GAME_WR].innerText);
+                    let gameWrB = parseValue(rowB.cells[COL_GAME_WR].innerText);
+                    if (gameWrA !== gameWrB) {
+                        return nextDir === 'asc' ? (gameWrA > gameWrB ? 1 : -1) : (gameWrA < gameWrB ? 1 : -1);
+                    }
+                }
+                
+                return 0;
+            });
+            
+            table.setAttribute(stateKey, nextDir);
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        
+        function parseValue(value) {
+            if (value === "-") return -1;
+            if (value.includes('%')) return parseFloat(value);
+            if (value.includes('/')) { 
+                let parts = value.split('/'); 
+                return parts[1] === '-' ? -1 : parseFloat(parts[0])/parseFloat(parts[1]); 
+            }
+            if (value.includes('-') && value.split('-').length === 2) {
+                // W-L 格式排序：以胜场为主
+                return parseFloat(value.split('-')[0]);
+            }
+            const number = parseFloat(value);
+            return isNaN(number) ? value.toLowerCase() : number;
+        }
     </script>
-</body></html>
+</body>
+</html>
