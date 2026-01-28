@@ -6,7 +6,6 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # ================== 配置 ==================
-# [修改] 移除了 url 字段，只保留 API 需要的 overview_page
 TOURNAMENTS = [
     {
         "slug": "2026-lck-cup", 
@@ -82,7 +81,7 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-# ---------- 抓取逻辑 ----------
+# ---------- 抓取逻辑 (双轨制：赛程表 + 积分榜) ----------
 def scrape(tournament):
     overview_page = tournament["overview_page"]
     stats = defaultdict(lambda: {
@@ -95,131 +94,151 @@ def scrape(tournament):
     })
 
     api_url = "https://lol.fandom.com/api.php"
+    session = requests.Session()
+    session.headers.update({'User-Agent': 'LoLStatsBot/StandingsV1 (https://github.com/closur3/lol)'})
+
+    # ==========================================
+    # 阶段 1: 抓取 MatchSchedule
+    # 目的: 仅用于计算 BO3/BO5 打满率 和 Last Date
+    # ==========================================
+    print(f"1. Fetching Matches for: {overview_page}...")
     matches = []
     limit = 500
     offset = 0
-    session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/FixedStreak (https://github.com/closur3/lol)'})
-
-    print(f"Fetching data for: {overview_page}...")
-
+    
     while True:
         params = {
-            "action": "cargoquery",
-            "format": "json",
-            "tables": "MatchSchedule",
+            "action": "cargoquery", "format": "json", "tables": "MatchSchedule",
             "fields": "Team1, Team2, Team1Score, Team2Score, DateTime_UTC, BestOf",
             "where": f"OverviewPage='{overview_page}'",
-            "order_by": "DateTime_UTC ASC",
-            "limit": limit,
-            "offset": offset
+            "order_by": "DateTime_UTC ASC", "limit": limit, "offset": offset
         }
-
         try:
-            time.sleep(4.0)
+            time.sleep(5.0) # 慢速请求
             response = session.get(api_url, params=params, timeout=20)
             data = response.json()
             
             if "error" in data:
-                print(f"   ⚠️ Rate Limit Hit. Sleeping 45s...")
-                time.sleep(45)
+                print(f"   ⚠️ Rate Limit. Sleeping 60s...")
+                time.sleep(60)
                 continue
             
             if "cargoquery" in data:
                 batch = [item["title"] for item in data["cargoquery"]]
                 matches.extend(batch)
-                print(f"   -> Got {len(batch)} matches...")
                 if len(batch) < limit: break
                 offset += limit
-            else:
-                break
+            else: break
         except Exception as e:
-            print(f"   Network Error: {e}. Sleeping 10s...")
-            time.sleep(10)
-            continue
+            print(f"   Network Error: {e}")
+            break
 
-    # [核心修复] 必须先预处理并严格排序，确保 Streak 计算正确
-    # 1. 清洗数据并解析时间
-    valid_matches = []
+    # 处理 Match 数据 (只提取 BO 和 日期)
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
         t2 = get_short_name(m.get("Team2", ""))
         date_str = m.get("DateTime_UTC") or m.get("DateTime UTC") or m.get("DateTime")
-        raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        if not (t1 and t2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
-            continue
-        try:
-            s1, s2 = int(raw_s1), int(raw_s2)
+        # 尝试解析分数仅为了判断 BO 类型
+        try: s1, s2 = int(m.get("Team1Score")), int(m.get("Team2Score"))
         except: continue
-        
-        if s1 == 0 and s2 == 0: continue
-        
-        # 解析时间
+        if s1 == 0 and s2 == 0: continue # 未开赛
+
+        # 时间处理
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
-            dt_obj = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
-        except:
-            dt_obj = datetime.min.replace(tzinfo=timezone.utc)
-            
-        valid_matches.append({
-            "t1": t1, "t2": t2, "s1": s1, "s2": s2,
-            "date": dt_obj, "best_of": m.get("BestOf")
-        })
+            series_date = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
+        except: series_date = None
 
-    # 2. 严格按时间正序排列 (Old -> New)
-    valid_matches.sort(key=lambda x: x["date"])
-
-    # 3. 逐场回放计算
-    for m in valid_matches:
-        t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
-        
-        winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
+        # BO3/BO5 判断逻辑
         max_s, min_s = max(s1, s2), min(s1, s2)
+        best_of = m.get("BestOf")
         
-        # 更新基础数据
+        # 更新 Last Date 和 BO 数据
         for team in (t1, t2):
-            if dt > datetime.min.replace(tzinfo=timezone.utc) and (not stats[team]["last_date"] or dt > stats[team]["last_date"]):
-                stats[team]["last_date"] = dt
-            stats[team]["series_total"] += 1
-            stats[team]["game_total"] += (s1 + s2)
+            if series_date and (not stats[team]["last_date"] or series_date > stats[team]["last_date"]):
+                stats[team]["last_date"] = series_date
             
-        stats[winner]["series_wins"] += 1
-        stats[t1]["game_wins"] += s1
-        stats[t2]["game_wins"] += s2
-        
-        # BO3/BO5
-        if m["best_of"] == "3" or (not m["best_of"] and max_s == 2):
-            for team in (t1, t2): stats[team]["bo3_total"] += 1
-            if min_s == 1:
-                for team in (t1, t2): stats[team]["bo3_full"] += 1
-        elif m["best_of"] == "5" or (not m["best_of"] and max_s == 3):
-            for team in (t1, t2): stats[team]["bo5_total"] += 1
-            if min_s == 2:
-                for team in (t1, t2): stats[team]["bo5_full"] += 1
-        
-        # [核心修复] Streak 逻辑
-        # 既然已经按时间正序，那么：
-        # 赢家：如果之前是连败(L)，现在清零变成1W；如果之前是连胜(W)，+1W
-        # 输家：如果之前是连胜(W)，现在清零变成1L；如果之前是连败(L)，+1L
-        
-        # 赢家处理
-        if stats[winner]["streak_losses"] > 0:
-            stats[winner]["streak_losses"] = 0
-            stats[winner]["streak_wins"] = 1
-        else:
-            stats[winner]["streak_wins"] += 1
+            if best_of == "3" or (not best_of and max_s == 2):
+                stats[team]["bo3_total"] += 1
+                if min_s == 1: stats[team]["bo3_full"] += 1
+            elif best_of == "5" or (not best_of and max_s == 3):
+                stats[team]["bo5_total"] += 1
+                if min_s == 2: stats[team]["bo5_full"] += 1
+
+    # ==========================================
+    # 阶段 2: 抓取 Standings (积分榜)
+    # 目的: 直接读取官方的 胜负场、小局分、连胜
+    # ==========================================
+    print(f"2. Fetching Standings for: {overview_page}...")
+    standings_data = []
+    
+    # 这里的查询表从 MatchSchedule 变成了 Standings
+    # 字段说明: Win(大场胜), Loss(大场负), GameWin(小局胜), GameLoss(小局负), Streak, StreakDirection
+    while True:
+        params = {
+            "action": "cargoquery", "format": "json", "tables": "Standings",
+            "fields": "Team, Win, Loss, GameWin, GameLoss, Streak, StreakDirection",
+            "where": f"OverviewPage='{overview_page}'",
+            "limit": 500
+        }
+        try:
+            time.sleep(5.0) # 再次慢速等待
+            response = session.get(api_url, params=params, timeout=20)
+            data = response.json()
             
-        # 输家处理
-        if stats[loser]["streak_wins"] > 0:
-            stats[loser]["streak_wins"] = 0
-            stats[loser]["streak_losses"] = 1
-        else:
-            stats[loser]["streak_losses"] += 1
-                
+            if "error" in data:
+                print(f"   ⚠️ Rate Limit during Standings. Sleeping 60s...")
+                time.sleep(60)
+                continue
+
+            if "cargoquery" in data:
+                standings_data = [item["title"] for item in data["cargoquery"]]
+                print(f"   -> Got {len(standings_data)} standing records.")
+                break # 积分榜通常只有一页，抓完直接跳出
+            else:
+                break
+        except Exception as e:
+            print(f"   Standings Fetch Error: {e}")
+            break
+
+    # 处理 Standings 数据 (覆盖之前的计算)
+    for row in standings_data:
+        team_name = get_short_name(row.get("Team", ""))
+        if not team_name: continue
+        
+        # 1. 覆盖系列赛数据
+        try:
+            w = int(row.get("Win", 0))
+            l = int(row.get("Loss", 0))
+            stats[team_name]["series_wins"] = w
+            stats[team_name]["series_total"] = w + l
+        except: pass
+
+        # 2. 覆盖小局数据
+        try:
+            gw = int(row.get("GameWin", 0))
+            gl = int(row.get("GameLoss", 0))
+            stats[team_name]["game_wins"] = gw
+            stats[team_name]["game_total"] = gw + gl
+        except: pass
+
+        # 3. 覆盖连胜数据 (最稳的来源)
+        try:
+            s_val = int(row.get("Streak", 0))
+            s_dir = row.get("StreakDirection", "") # 通常是 'Win' 或 'Loss'
+            
+            if s_dir == "Win":
+                stats[team_name]["streak_wins"] = s_val
+                stats[team_name]["streak_losses"] = 0
+            elif s_dir == "Loss":
+                stats[team_name]["streak_wins"] = 0
+                stats[team_name]["streak_losses"] = s_val
+        except: pass
+
     return stats
 
-# ---------- 生成 Markdown 归档 (表头全大写) ----------
+# ---------- 生成 Markdown 归档 ----------
 def save_markdown(tournament, team_stats):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     lp_url = f"https://lol.fandom.com/wiki/{tournament['overview_page'].replace(' ', '_')}"
@@ -264,7 +283,7 @@ def save_markdown(tournament, team_stats):
     md_file.write_text(md_content, encoding='utf-8')
     print(f"✓ Archived: {md_file}")
 
-# ---------- 生成 HTML (表头全大写) ----------
+# ---------- 生成 HTML ----------
 def build(all_data):
     now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
     html = f"""<!DOCTYPE html>
@@ -445,7 +464,7 @@ def build(all_data):
     print(f"✓ Generated: {INDEX_FILE}")
 
 if __name__ == "__main__":
-    print("Starting LoL Stats Scraper with Archive...")
+    print("Starting LoL Stats Scraper (Hybrid Mode)...")
     data = {}
     
     for tournament in TOURNAMENTS:
