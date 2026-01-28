@@ -1,46 +1,63 @@
 import requests
 import json
-from datetime import datetime
 
-def probe_global_latest():
-    print("🌍 正在扫描 Leaguepedia 最近录入的比赛数据 (不分战队)...")
+def probe_correct_names():
+    print("🚀 开始探测 Leaguepedia 真实数据 (修正字段版)...")
     
     url = "https://lol.fandom.com/api.php"
     params = {
         "action": "cargoquery",
         "format": "json",
         "tables": "MatchSchedule",
-        "fields": "OverviewPage, Team1, Team2, Score1, Score2, DateTime_UTC, Winner",
-        # 只要是 2026-01-10 之后的比赛都拿出来看看
-        "where": "DateTime_UTC >= '2026-01-10' AND Score1 IS NOT NULL", 
+        # 修正点：使用正确的字段名 Team1Score, Team2Score
+        "fields": "OverviewPage, DateTime_UTC, Team1, Team2, Team1Score, Team2Score",
+        # 只要是今年起的比赛，不管打没打完都显示出来
+        "where": "DateTime_UTC >= '2026-01-01'",
         "order_by": "DateTime_UTC DESC",
         "limit": 10
     }
     
     try:
-        response = requests.get(url, params=params, headers={'User-Agent': 'ProbeBot/1.0'}, timeout=15)
+        response = requests.get(url, params=params, headers={'User-Agent': 'FixBot/1.0'}, timeout=15)
         data = response.json()
         
-        matches = data.get("cargoquery", [])
-        if not matches:
-            print("❌ 依然没有抓到数据。这说明可能是 where 条件的时间或者字段名有问题。")
-            print("尝试移除 'Score1 IS NOT NULL' 再试一次...")
+        # 调试：如果返回错误信息，直接打印出来
+        if "error" in data:
+            print(f"❌ API 报错: {data['error']}")
             return
 
-        print(f"✅ 成功抓取到 {len(matches)} 条最近比赛记录！")
-        print("请仔细对比下表中的【OverviewPage】和【Team Name】：")
+        matches = data.get("cargoquery", [])
+        if not matches:
+            print("❌ 依然没数据。请检查你的网络能否访问 lol.fandom.com")
+            return
+
+        print(f"✅ 成功连接！抓到了 {len(matches)} 条记录。")
+        print("请直接复制下表中【OverviewPage】列的内容到你的配置文件里：")
         print("=" * 100)
-        print(f"{'Time (UTC)':<18} | {'OverviewPage (复制这个到配置里)':<40} | {'Team1'}")
+        print(f"{'Time (UTC)':<18} | {'OverviewPage (复制这个!)':<40} | {'Match'}")
         print("-" * 100)
         
+        unique_pages = set()
         for item in matches:
             m = item["title"]
-            print(f"{m.get('DateTime_UTC', '')[:16]:<18} | {m.get('OverviewPage', ''):<40} | {m.get('Team1', '')}")
+            time_str = m.get('DateTime_UTC', '')[:16]
+            page = m.get('OverviewPage', 'N/A')
+            t1 = m.get('Team1', '?')
+            t2 = m.get('Team2', '?')
+            print(f"{time_str:<18} | {page:<40} | {t1} vs {t2}")
+            unique_pages.add(page)
             
         print("=" * 100)
+        print("\n💡 你的 TOURNAMENTS 配置应该长这样：")
+        print("TOURNAMENTS = [")
+        for p in unique_pages:
+            if "LPL" in p or "LCK" in p:
+                slug = p.lower().replace("/", "-").replace(" ", "-")
+                print(f'    {{ "slug": "{slug}", "title": "{p}", "overview_page": "{p}" }},')
+        print("]")
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Python 报错: {e}")
 
 if __name__ == "__main__":
-    probe_global_latest()
+    probe_correct_names()
