@@ -471,10 +471,10 @@ def build(all_data, all_matches_global, is_done_today):
     # [修改] 2. 状态指示器逻辑
     if is_done_today:
         # Finished: 灰色
-        status_html = '<span style="color:#9ca3af; margin-left:6px">● Finished</span>'
+        status_html = '<span style="color:#9ca3af; margin-left:6px">● FINISHED</span>'
     else:
         # Ongoing: 绿色
-        status_html = '<span style="color:#10b981; margin-left:6px">● Ongoing</span>'
+        status_html = '<span style="color:#10b981; margin-left:6px">● ONGOING</span>'
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -595,7 +595,7 @@ def build(all_data, all_matches_global, is_done_today):
 
     # [修改] 3. 页脚拼接 status_html (取代 CST)
     html += f"""
-    <div class="footer">Updated: {now_str} {status_html} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
+    <div class="footer">Updated: {now_str} | {status_html} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
     </div>
     <script>
         const COL_TEAM = {COL_TEAM};
