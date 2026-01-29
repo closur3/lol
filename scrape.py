@@ -595,7 +595,7 @@ def build(all_data, all_matches_global, is_done_today):
 
     # [修改] 3. 页脚拼接 status_html (取代 CST)
     html += f"""
-    <div class="footer">{status_html} | Updated: <a href="{GITHUB_REPO}" target="_blank" style="color:inherit; text-decoration:none">{now_str}</a></div>
+    <div class="footer">{status_html} | <a href="{GITHUB_REPO}" target="_blank" style="color:inherit; text-decoration:none">Updated: {now_str}</a></div>
     </div>
     <script>
         const COL_TEAM = {COL_TEAM};
