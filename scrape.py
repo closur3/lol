@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
 import sys
-import re # 引入正则处理
+import re
 
 # ================== 0. 全局常量 ==================
 COL_TEAM = 0
@@ -54,9 +54,16 @@ def load_team_map():
 TEAM_MAP = load_team_map()
 
 def get_short_name(full_name):
-    name_upper = full_name.upper()
+    if not full_name: return None
+    upper_name = full_name.upper()
+    
+    # 过滤占位符
+    ignore_list = ["TBD", "TBA", "TO BE DETERMINED", "UNKNOWN", "?"]
+    for bad_word in ignore_list:
+        if bad_word in upper_name: return None
+
     for key, short_val in TEAM_MAP.items():
-        if key.upper() in name_upper: return short_val
+        if key.upper() in upper_name: return short_val
     return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
 def rate(n, d): return n / d if d > 0 else None 
@@ -86,7 +93,6 @@ def wait_simple(seconds, reason="Cooldown"):
     time.sleep(seconds)
     print(" Done.", flush=True)
 
-# [新增] 智能写入：只有数据变了才写入文件
 def smart_write(file_path, new_content):
     if not file_path.exists():
         file_path.write_text(new_content, encoding='utf-8')
@@ -95,19 +101,15 @@ def smart_write(file_path, new_content):
 
     old_content = file_path.read_text(encoding='utf-8')
 
-    # 定义清理函数：移除包含 "Updated:" 或 "Updated at:" 的行
     def clean_content(text):
         return "\n".join([
             line for line in text.splitlines() 
             if "Updated:" not in line and "Updated at:" not in line
         ])
 
-    # 对比剔除时间戳后的纯内容
     if clean_content(new_content) == clean_content(old_content):
-        # 数据没变，什么都不做，这样 git 就检测不到文件修改
         print(f"   💤 No data changes for {file_path.name}, skipping write.")
     else:
-        # 数据变了，写入新内容（包含新时间戳）
         file_path.write_text(new_content, encoding='utf-8')
         print(f"   🚀 Data changed! Updated {file_path.name}")
 
@@ -128,7 +130,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/SmartWrite (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/StableV1 (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -175,6 +177,7 @@ def scrape(tournament):
     # --- 数据处理 ---
     print(f"   ... Processing & Sorting {len(matches)} matches...", flush=True)
     valid_matches = []
+    future_matches = [] # [新增] 用于收集未完场比赛，供智能休眠判断
     
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
@@ -186,38 +189,39 @@ def scrape(tournament):
 
         raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        if not (t1 and t2 and date_str) or raw_s1 in [None, ""] or raw_s2 in [None, ""]:
-            continue
-        try: s1, s2 = int(raw_s1), int(raw_s2)
-        except: continue
-        
-        if s1 == 0 and s2 == 0: continue
+        # 只要有队伍和日期，就先提取出来
+        if not (t1 and t2 and date_str): continue
 
-        # [完场检测] 只有当一方获胜才算完场
+        s1 = int(raw_s1) if raw_s1 not in [None, ""] else 0
+        s2 = int(raw_s2) if raw_s2 not in [None, ""] else 0
+        
         best_of_str = m.get("BestOf")
         try: bo_val = int(best_of_str) if best_of_str else 3
         except: bo_val = 3
         
-        required_wins = (bo_val // 2) + 1
-        if max(s1, s2) < required_wins:
-            continue # 跳过未完场
-
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
             dt_obj = datetime.strptime(clean_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(CST)
         except:
             dt_obj = datetime.min.replace(tzinfo=timezone.utc)
             
-        valid_matches.append({
+        match_data = {
             "t1": t1, "t2": t2, "s1": s1, "s2": s2,
             "date": dt_obj, "best_of": str(bo_val),
             "order": match_order,
             "region": tournament.get("region", "Unknown")
-        })
+        }
+
+        # [判定逻辑] 分流完场和未完场
+        required_wins = (bo_val // 2) + 1
+        if max(s1, s2) < required_wins:
+            future_matches.append(match_data) # 未完场，丢进 future 列表
+        else:
+            valid_matches.append(match_data)  # 完场，进统计列表
 
     valid_matches.sort(key=lambda x: (x["date"], x["order"]))
 
-    # --- 统计逻辑 ---
+    # --- 统计逻辑 (仅针对 valid_matches) ---
     for m in valid_matches:
         t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
@@ -252,7 +256,8 @@ def scrape(tournament):
             stats[loser]["streak_losses"] = 1
         else: stats[loser]["streak_losses"] += 1
                 
-    return stats, valid_matches
+    # 返回三个值：统计结果, 完场列表, 未完场列表(用于status.json)
+    return stats, valid_matches, future_matches
 
 # ================== 4. 时间分布表计算 ==================
 def process_time_stats(all_matches):
@@ -272,7 +277,7 @@ def process_time_stats(all_matches):
         
         is_full = False
         s1, s2 = m['s1'], m['s2']
-        max_s, min_s = max(s1, s2), min(s1, s2)
+        min_s = min(s1, s2)
         bo = m['best_of']
         
         if bo == "3":
@@ -397,7 +402,6 @@ def save_markdown(tournament, team_stats, global_matches):
     
     md_file = TOURNAMENT_DIR / f"{tournament['slug']}.md"
     
-    # [修改] 使用智能写入
     smart_write(md_file, md_content)
 
 def generate_time_table_html(time_data):
@@ -694,12 +698,15 @@ if __name__ == "__main__":
     
     data_store = []
     all_matches_global = [] 
+    all_future_matches = [] # 收集所有未完场比赛
     
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
-        team_stats, matches = scrape(tournament)
+        # 获取三个返回值：统计, 完场, 未完场
+        team_stats, matches, futures = scrape(tournament)
         
         all_matches_global.extend(matches)
+        all_future_matches.extend(futures)
         
         data_store.append({
             "tournament": tournament,
@@ -713,5 +720,32 @@ if __name__ == "__main__":
         
     html_data = {item["tournament"]["slug"]: item["stats"] for item in data_store}
     build(html_data, all_matches_global)
+    
+    # ================= [新增] 生成 status.json =================
+    # 逻辑：检查 all_future_matches 里是否还有今天的比赛
+    import json
+    
+    today_str = datetime.now(CST).strftime("%Y-%m-%d")
+    
+    # 过滤出日期是"今天"的未完场比赛
+    remaining_today = [
+        m for m in all_future_matches 
+        if m['date'].strftime("%Y-%m-%d") == today_str
+    ]
+    
+    is_done_for_today = (len(remaining_today) == 0)
+    
+    status_content = {
+        "date": today_str,
+        "finished": is_done_for_today,
+        "updated_at": datetime.now(CST).strftime("%H:%M:%S")
+    }
+    
+    print(f"\n[Smart Sleep] Remaining matches for {today_str}: {len(remaining_today)}")
+    print(f"[Smart Sleep] Writing status.json: {status_content}")
+    
+    # 写入文件
+    Path("status.json").write_text(json.dumps(status_content), encoding='utf-8')
+    # =========================================================
     
     print("\n✅ All done!", flush=True)
