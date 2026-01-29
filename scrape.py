@@ -57,7 +57,6 @@ def get_short_name(full_name):
     if not full_name: return None
     upper_name = full_name.upper()
     
-    # 过滤占位符
     ignore_list = ["TBD", "TBA", "TO BE DETERMINED", "UNKNOWN", "?"]
     for bad_word in ignore_list:
         if bad_word in upper_name: return None
@@ -177,7 +176,7 @@ def scrape(tournament):
     # --- 数据处理 ---
     print(f"   ... Processing & Sorting {len(matches)} matches...", flush=True)
     valid_matches = []
-    future_matches = [] # [新增] 用于收集未完场比赛，供智能休眠判断
+    future_matches = [] 
     
     for m in matches:
         t1 = get_short_name(m.get("Team1", ""))
@@ -189,7 +188,6 @@ def scrape(tournament):
 
         raw_s1, raw_s2 = m.get("Team1Score"), m.get("Team2Score")
         
-        # 只要有队伍和日期，就先提取出来
         if not (t1 and t2 and date_str): continue
 
         s1 = int(raw_s1) if raw_s1 not in [None, ""] else 0
@@ -212,16 +210,15 @@ def scrape(tournament):
             "region": tournament.get("region", "Unknown")
         }
 
-        # [判定逻辑] 分流完场和未完场
         required_wins = (bo_val // 2) + 1
         if max(s1, s2) < required_wins:
-            future_matches.append(match_data) # 未完场，丢进 future 列表
+            future_matches.append(match_data) 
         else:
-            valid_matches.append(match_data)  # 完场，进统计列表
+            valid_matches.append(match_data) 
 
     valid_matches.sort(key=lambda x: (x["date"], x["order"]))
 
-    # --- 统计逻辑 (仅针对 valid_matches) ---
+    # --- 统计逻辑 ---
     for m in valid_matches:
         t1, t2, s1, s2, dt = m["t1"], m["t2"], m["s1"], m["s2"], m["date"]
         winner, loser = (t1, t2) if s1 > s2 else (t2, t1)
@@ -256,7 +253,6 @@ def scrape(tournament):
             stats[loser]["streak_losses"] = 1
         else: stats[loser]["streak_losses"] += 1
                 
-    # 返回三个值：统计结果, 完场列表, 未完场列表(用于status.json)
     return stats, valid_matches, future_matches
 
 # ================== 4. 时间分布表计算 ==================
@@ -467,9 +463,18 @@ def generate_time_table_html(time_data):
     """
     return html
 
-def build(all_data, all_matches_global):
-    now = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S CST")
+def build(all_data, all_matches_global, is_done_today):
+    # [修改] 1. 去掉 CST 后缀
+    now_str = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     time_table_html = generate_time_table_html(process_time_stats(all_matches_global))
+    
+    # [修改] 2. 状态指示器逻辑
+    if is_done_today:
+        # Finished: 灰色
+        status_html = '<span style="color:#9ca3af; margin-left:6px">● Finished</span>'
+    else:
+        # Ongoing: 绿色
+        status_html = '<span style="color:#10b981; margin-left:6px">● Ongoing</span>'
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -588,8 +593,9 @@ def build(all_data, all_matches_global):
 
     html += time_table_html
 
+    # [修改] 3. 页脚拼接 status_html (取代 CST)
     html += f"""
-    <div class="footer">Updated: {now} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
+    <div class="footer">Updated: {now_str} {status_html} | <a href="{GITHUB_REPO}" target="_blank">GitHub</a></div>
     </div>
     <script>
         const COL_TEAM = {COL_TEAM};
@@ -690,7 +696,6 @@ def build(all_data, all_matches_global):
 </body>
 </html>"""
     
-    # [修改] 对 HTML 文件也使用智能写入
     smart_write(INDEX_FILE, html)
 
 if __name__ == "__main__":
@@ -698,7 +703,7 @@ if __name__ == "__main__":
     
     data_store = []
     all_matches_global = [] 
-    all_future_matches = [] # 收集所有未完场比赛
+    all_future_matches = [] 
     
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
@@ -717,24 +722,20 @@ if __name__ == "__main__":
     
     for item in data_store:
         save_markdown(item["tournament"], item["stats"], all_matches_global)
-        
-    html_data = {item["tournament"]["slug"]: item["stats"] for item in data_store}
-    build(html_data, all_matches_global)
     
-    # ================= [新增] 生成 status.json =================
-    # 逻辑：检查 all_future_matches 里是否还有今天的比赛
-    import json
-    
+    # [新增] 计算今日完赛状态，只在这里算一次
     today_str = datetime.now(CST).strftime("%Y-%m-%d")
-    
-    # 过滤出日期是"今天"的未完场比赛
     remaining_today = [
         m for m in all_future_matches 
         if m['date'].strftime("%Y-%m-%d") == today_str
     ]
-    
     is_done_for_today = (len(remaining_today) == 0)
+
+    html_data = {item["tournament"]["slug"]: item["stats"] for item in data_store}
+    # [传参] 把 is_done_today 传给 build
+    build(html_data, all_matches_global, is_done_for_today)
     
+    import json
     status_content = {
         "date": today_str,
         "finished": is_done_for_today,
@@ -744,8 +745,6 @@ if __name__ == "__main__":
     print(f"\n[Smart Sleep] Remaining matches for {today_str}: {len(remaining_today)}")
     print(f"[Smart Sleep] Writing status.json: {status_content}")
     
-    # 写入文件
     Path("status.json").write_text(json.dumps(status_content), encoding='utf-8')
-    # =========================================================
     
     print("\n✅ All done!", flush=True)
