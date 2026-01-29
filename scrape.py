@@ -59,7 +59,9 @@ def get_short_name(full_name):
     return full_name.replace("Esports", "").replace("Gaming", "").replace("Academy", "").replace("Team", "").strip()
 
 def rate(n, d): return n / d if d > 0 else None 
-def pct(r): return f"{r*100:.1f}%" if r is not None else "-"
+
+# [修改] 百分比只显示整数
+def pct(r): return f"{int(r*100)}%" if r is not None else "-"
 
 def get_hsl(hue, saturation=55, lightness=50): 
     return f"hsl({int(hue)}, {saturation}%, {lightness}%)"
@@ -102,7 +104,7 @@ def scrape(tournament):
     limit = 500
     offset = 0
     session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/GlobalArchive (https://github.com/closur3/lol)'})
+    session.headers.update({'User-Agent': 'LoLStatsBot/FinishedOnly (https://github.com/closur3/lol)'})
 
     print(f"Fetching data for: {overview_page}...", flush=True)
 
@@ -164,7 +166,24 @@ def scrape(tournament):
             continue
         try: s1, s2 = int(raw_s1), int(raw_s2)
         except: continue
+        
         if s1 == 0 and s2 == 0: continue
+
+        # [新增] 严格的完场检测逻辑
+        # 1. 获取赛制 (默认 BO3)
+        best_of_str = m.get("BestOf")
+        try:
+            bo_val = int(best_of_str) if best_of_str else 3
+        except:
+            bo_val = 3
+            
+        # 2. 计算获胜所需胜场 (BO3->2, BO5->3)
+        required_wins = (bo_val // 2) + 1
+        
+        # 3. 只有当某队达到获胜分才算完场
+        # 例如 BO3 打成 1-0，max(1,0)=1 < 2 -> 跳过
+        if max(s1, s2) < required_wins:
+            continue
 
         try:
             clean_date = date_str.replace(" UTC", "").split("+")[0].strip()
@@ -174,7 +193,7 @@ def scrape(tournament):
             
         valid_matches.append({
             "t1": t1, "t2": t2, "s1": s1, "s2": s2,
-            "date": dt_obj, "best_of": m.get("BestOf"),
+            "date": dt_obj, "best_of": str(bo_val), # 标准化为字符串
             "order": match_order,
             "region": tournament.get("region", "Unknown")
         })
@@ -197,11 +216,12 @@ def scrape(tournament):
         stats[t1]["game_wins"] += s1
         stats[t2]["game_wins"] += s2
         
-        if m["best_of"] == "3" or (not m["best_of"] and max_s == 2):
+        # BO3/BO5 逻辑 (现在只有完场的比赛会进到这里，逻辑更安全)
+        if m["best_of"] == "3":
             for team in (t1, t2): stats[team]["bo3_total"] += 1
             if min_s == 1:
                 for team in (t1, t2): stats[team]["bo3_full"] += 1
-        elif m["best_of"] == "5" or (not m["best_of"] and max_s == 3):
+        elif m["best_of"] == "5":
             for team in (t1, t2): stats[team]["bo5_total"] += 1
             if min_s == 2:
                 for team in (t1, t2): stats[team]["bo5_full"] += 1
@@ -239,9 +259,9 @@ def process_time_stats(all_matches):
         max_s, min_s = max(s1, s2), min(s1, s2)
         bo = m['best_of']
         
-        if bo == "3" or (not bo and max_s == 2):
+        if bo == "3":
             if min_s == 1: is_full = True
-        elif bo == "5" or (not bo and max_s == 3):
+        elif bo == "5":
             if min_s == 2: is_full = True
         else: continue
             
@@ -279,7 +299,6 @@ def process_time_stats(all_matches):
     return time_data
 
 def generate_markdown_time_table(time_data):
-    """生成 Markdown 表格 (包含所有赛区数据)"""
     md = "\n### Time Distribution (Full Series Rate)\n\n"
     md += "| Time Slot | Mon | Tue | Wed | Thu | Fri | Sat | Sun | Total |\n"
     md += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
@@ -354,7 +373,6 @@ def save_markdown(tournament, team_stats, global_matches):
         
         md_content += f"| {team_name} | {bo3_text} | {pct(bo3_ratio)} | {bo5_text} | {pct(bo5_ratio)} | {series_text} | {pct(series_win_ratio)} | {game_text} | {pct(game_win_ratio)} | {streak_display} | {last_date_display} |\n"
     
-    # [关键] 传入的是 global_matches，所以生成的表是“全”的
     time_stats = process_time_stats(global_matches)
     md_table = generate_markdown_time_table(time_stats)
     md_content += md_table
@@ -481,7 +499,6 @@ def build(all_data, all_matches_global):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # --- 渲染原有的赛事表 ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
