@@ -735,16 +735,28 @@ if __name__ == "__main__":
     # [传参] 把 is_done_today 传给 build
     build(html_data, all_matches_global, is_done_for_today)
     
-    import json
-    status_content = {
-        "date": today_str,
-        "finished": is_done_for_today,
-        "updated_at": datetime.now(CST).strftime("%H:%M:%S")
-    }
-    
     print(f"\n[Smart Sleep] Remaining matches for {today_str}: {len(remaining_today)}")
-    print(f"[Smart Sleep] Writing status.json: {status_content}")
     
-    Path("status.json").write_text(json.dumps(status_content), encoding='utf-8')
+    # [修改] Smart Sleep 逻辑：只在 date 或 finished 状态改变时才写入
+    status_file = Path("status.json")
+    should_write_status = True
+    
+    if status_file.exists():
+        try:
+            old_status = json.loads(status_file.read_text(encoding='utf-8'))
+            if old_status.get("date") == today_str and old_status.get("finished") == is_done_for_today:
+                should_write_status = False
+                print(f"   💤 Status unchanged (Finished={is_done_for_today}), skipping status.json update.")
+        except:
+            pass
+            
+    if should_write_status:
+        status_content = {
+            "date": today_str,
+            "finished": is_done_for_today,
+            "updated_at": datetime.now(CST).strftime("%H:%M:%S")
+        }
+        print(f"   🚀 Status changed! Writing status.json: {status_content}")
+        status_file.write_text(json.dumps(status_content), encoding='utf-8')
     
     print("\n✅ All done!", flush=True)
