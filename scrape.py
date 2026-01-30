@@ -128,7 +128,7 @@ def scrape(tournament):
 
     api_url = "https://lol.fandom.com/api.php"
     matches = []
-    limit = 500
+    limit = 50
     offset = 0
     session = requests.Session()
     session.headers.update({'User-Agent': 'LoLStatsBot/StableV1 (https://github.com/closur3/lol)'})
