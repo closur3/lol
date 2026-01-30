@@ -38,7 +38,7 @@ jobs:
           
           if [[ -n $(git status --porcelain) ]]; then
             echo "🚀 Content changed. Committing..."
-            git add index.html tournament/*.md status.json
+            git add index.html tournament/*.md
             git commit -m "Auto-update: $(date +'%Y-%m-%d %H:%M')"
             git push
           else
