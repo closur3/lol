@@ -22,27 +22,29 @@ COL_LAST_DATE = 10
 
 INDEX_FILE = Path("index.html")
 TEAMS_JSON = Path("teams.json")
+# 🔥 配置文件路径
+TOURNAMENTS_FILE = Path("tournaments.json") 
 TOURNAMENT_DIR = Path("tournament")
 GITHUB_REPO = "https://github.com/closur3/lol"
 
 TOURNAMENT_DIR.mkdir(exist_ok=True)
 CST = timezone(timedelta(hours=8)) # 北京时间
 
-# ================== 1. 赛事配置 ==================
-TOURNAMENTS = [
-    {
-        "slug": "2026-lck-cup", 
-        "title": "2026 LCK Cup", 
-        "overview_page": "LCK/2026 Season/Cup",
-        "region": "LCK" 
-    },
-    {
-        "slug": "2026-lpl-split-1", 
-        "title": "2026 LPL Split 1", 
-        "overview_page": "LPL/2026 Season/Split 1",
-        "region": "LPL"
-    },
-]
+# ================== 1. 赛事配置 (读取文件) ==================
+def load_tournaments():
+    if not TOURNAMENTS_FILE.exists():
+        print("❌ Error: tournaments.json not found!")
+        sys.exit(1)
+    
+    try:
+        content = TOURNAMENTS_FILE.read_text(encoding='utf-8')
+        return json.loads(content)
+    except Exception as e:
+        print(f"❌ Error parsing tournaments.json: {e}")
+        sys.exit(1)
+
+TOURNAMENTS = load_tournaments()
+print(f"✅ Loaded {len(TOURNAMENTS)} tournaments from config.")
 
 # ================== 2. 辅助工具 ==================
 def load_team_map():
@@ -525,7 +527,7 @@ def build(all_data, all_matches_global, is_done_today):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # --- 渲染原有的赛事表 ---
+    # --- 渲染原有的赛事表 (使用配置好的 TOURNAMENTS) ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -705,6 +707,7 @@ if __name__ == "__main__":
     all_matches_global = [] 
     all_future_matches = [] 
     
+    # [修改] 这里遍历全局加载的 TOURNAMENTS
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
         # 获取三个返回值：统计, 完场, 未完场
@@ -736,27 +739,4 @@ if __name__ == "__main__":
     build(html_data, all_matches_global, is_done_for_today)
     
     print(f"\n[Smart Sleep] Remaining matches for {today_str}: {len(remaining_today)}")
-    
-    # [修改] Smart Sleep 逻辑：只在 date 或 finished 状态改变时才写入
-    status_file = Path("status.json")
-    should_write_status = True
-    
-    if status_file.exists():
-        try:
-            old_status = json.loads(status_file.read_text(encoding='utf-8'))
-            if old_status.get("date") == today_str and old_status.get("finished") == is_done_for_today:
-                should_write_status = False
-                print(f"   💤 Status unchanged (Finished={is_done_for_today}), skipping status.json update.")
-        except:
-            pass
-            
-    if should_write_status:
-        status_content = {
-            "date": today_str,
-            "finished": is_done_for_today,
-            "updated_at": datetime.now(CST).strftime("%H:%M:%S")
-        }
-        print(f"   🚀 Status changed! Writing status.json: {status_content}")
-        status_file.write_text(json.dumps(status_content), encoding='utf-8')
-    
     print("\n✅ All done!", flush=True)
