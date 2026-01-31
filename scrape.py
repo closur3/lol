@@ -5,9 +5,11 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import time
 import sys
-import re
 
-# ================== 0. 全局常量 ==================
+# ================== 0. 全局常量 & 配置 ==================
+# 🔥 请务必替换成你的 Worker 域名
+WORKER_HOST = "https://gh-lol.closur3.workers.dev"
+
 COL_TEAM = 0
 COL_BO3 = 1
 COL_BO3_PCT = 2
@@ -22,7 +24,6 @@ COL_LAST_DATE = 10
 
 INDEX_FILE = Path("index.html")
 TEAMS_JSON = Path("teams.json")
-# 🔥 配置文件路径
 TOURNAMENTS_FILE = Path("tournaments.json") 
 TOURNAMENT_DIR = Path("tournament")
 GITHUB_REPO = "https://github.com/closur3/lol"
@@ -89,11 +90,6 @@ def color_by_date(date, all_dates):
     except:
         return "#9ca3af"
 
-def wait_simple(seconds, reason="Cooldown"):
-    print(f"      ⏳ {reason} ({seconds}s)...", end="", flush=True)
-    time.sleep(seconds)
-    print(" Done.", flush=True)
-
 def smart_write(file_path, new_content):
     if not file_path.exists():
         file_path.write_text(new_content, encoding='utf-8')
@@ -114,9 +110,32 @@ def smart_write(file_path, new_content):
         file_path.write_text(new_content, encoding='utf-8')
         print(f"   🚀 Data changed! Updated {file_path.name}")
 
-# ================== 3. 核心抓取逻辑 ==================
+# ================== 3. 核心抓取逻辑 (改用 Worker 缓存) ==================
 def scrape(tournament):
-    overview_page = tournament["overview_page"]
+    slug = tournament["slug"]
+    
+    # 🚀 核心修改：直接从 Worker KV 读取全量数据
+    target_url = f"{WORKER_HOST}/raw-data?slug={slug}"
+    
+    print(f"Fetching data from Worker Cache: {slug}...", end=" ", flush=True)
+    
+    matches = []
+    try:
+        # 设置超时，防止网络卡死
+        resp = requests.get(target_url, timeout=30)
+        
+        if resp.status_code == 200:
+            matches = resp.json() # Worker 返回的是完整的 list
+            print(f"OK! Got {len(matches)} items.", flush=True)
+        else:
+            print(f"❌ Worker Error {resp.status_code}", flush=True)
+            return defaultdict(lambda: {}), [], []
+            
+    except Exception as e:
+        print(f"❌ Connection Failed: {e}", flush=True)
+        return defaultdict(lambda: {}), [], []
+
+    # --- 数据处理 (逻辑保持不变) ---
     stats = defaultdict(lambda: {
         "bo3_full": 0, "bo3_total": 0, 
         "bo5_full": 0, "bo5_total": 0, 
@@ -125,58 +144,7 @@ def scrape(tournament):
         "streak_wins": 0, "streak_losses": 0, 
         "streak_dirty": False, "last_date": None
     })
-
-    api_url = "https://lol.fandom.com/api.php"
-    matches = []
-    limit = 50
-    offset = 0
-    session = requests.Session()
-    session.headers.update({'User-Agent': 'LoLStatsBot/StableV1 (https://github.com/closur3/lol)'})
-
-    print(f"Fetching data for: {overview_page}...", flush=True)
-
-    while True:
-        params = {
-            "action": "cargoquery",
-            "format": "json",
-            "tables": "MatchSchedule",
-            "fields": "Team1, Team2, Team1Score, Team2Score, DateTime_UTC, BestOf, N_MatchInPage",
-            "where": f"OverviewPage='{overview_page}'",
-            "order_by": "DateTime_UTC ASC", 
-            "limit": limit,
-            "offset": offset
-        }
-
-        wait_simple(3, "Safety delay")
-
-        try:
-            print(f"      -> Requesting offset {offset}...", end=" ", flush=True)
-            response = session.get(api_url, params=params, timeout=20)
-            data = response.json()
-            
-            if "error" in data:
-                print("FAILED!", flush=True)
-                print(f"      ⚠️  RATE LIMIT HIT! (API refused connection)", flush=True)
-                wait_simple(60, "Resetting Quota")
-                continue
-            
-            if "cargoquery" in data:
-                batch = [item["title"] for item in data["cargoquery"]]
-                matches.extend(batch)
-                print(f"OK! Got {len(batch)} items. (Total: {len(matches)})", flush=True)
-                
-                if len(batch) < limit: break
-                offset += limit
-            else:
-                print("Empty response.", flush=True)
-                break
-        except Exception as e:
-            print(f"\n      ❌ Network Error: {e}", flush=True)
-            time.sleep(5)
-            break
-
-    # --- 数据处理 ---
-    print(f"   ... Processing & Sorting {len(matches)} matches...", flush=True)
+    
     valid_matches = []
     future_matches = [] 
     
@@ -466,16 +434,12 @@ def generate_time_table_html(time_data):
     return html
 
 def build(all_data, all_matches_global, is_done_today):
-    # [修改] 1. 去掉 CST 后缀
     now_str = datetime.now(CST).strftime("%Y-%m-%d %H:%M:%S")
     time_table_html = generate_time_table_html(process_time_stats(all_matches_global))
     
-    # [修改] 2. 状态指示器逻辑
     if is_done_today:
-        # Finished: 灰色
         status_html = '<span style="color:#9ca3af; margin-left:6px">● FINISHED</span>'
     else:
-        # Ongoing: 绿色
         status_html = '<span style="color:#10b981; margin-left:6px">● ONGOING</span>'
     
     html = f"""<!DOCTYPE html>
@@ -527,7 +491,6 @@ def build(all_data, all_matches_global, is_done_today):
     <header class="main-header"><h1>🏆</h1></header>
     <div style="max-width:1400px; margin:0 auto">"""
 
-    # --- 渲染原有的赛事表 (使用配置好的 TOURNAMENTS) ---
     for index, tournament in enumerate(TOURNAMENTS):
         team_stats = all_data.get(tournament["slug"], {})
         table_id = f"t{index}"
@@ -595,7 +558,6 @@ def build(all_data, all_matches_global, is_done_today):
 
     html += time_table_html
 
-    # [修改] 3. 页脚拼接 status_html (取代 CST)
     html += f"""
     <div class="footer">{status_html} | <a href="{GITHUB_REPO}" target="_blank" style="color:inherit; text-decoration:none">Updated: {now_str}</a></div>
     </div>
@@ -707,7 +669,6 @@ if __name__ == "__main__":
     all_matches_global = [] 
     all_future_matches = [] 
     
-    # [修改] 这里遍历全局加载的 TOURNAMENTS
     for tournament in TOURNAMENTS:
         print(f"\nProcessing: {tournament['title']}", flush=True)
         # 获取三个返回值：统计, 完场, 未完场
@@ -726,7 +687,6 @@ if __name__ == "__main__":
     for item in data_store:
         save_markdown(item["tournament"], item["stats"], all_matches_global)
     
-    # [新增] 计算今日完赛状态，只在这里算一次
     today_str = datetime.now(CST).strftime("%Y-%m-%d")
     remaining_today = [
         m for m in all_future_matches 
@@ -735,7 +695,6 @@ if __name__ == "__main__":
     is_done_for_today = (len(remaining_today) == 0)
 
     html_data = {item["tournament"]["slug"]: item["stats"] for item in data_store}
-    # [传参] 把 is_done_today 传给 build
     build(html_data, all_matches_global, is_done_for_today)
     
     print(f"\n[Smart Sleep] Remaining matches for {today_str}: {len(remaining_today)}")
