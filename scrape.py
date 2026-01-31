@@ -507,7 +507,7 @@ def build(all_data, all_matches_global, is_done_today):
         .col-game {{ width: 80px; }}
         .col-game-wr {{ width: 100px; }}
         .col-streak {{ width: 80px; }}
-        .col-last {{ width: 120px; }}
+        .col-last {{ width: 130px; }}
         .badge {{ color: white; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: 700; }}
         .footer {{ text-align: center; font-size: 12px; color: #94a3b8; margin: 40px 0; }}
         
